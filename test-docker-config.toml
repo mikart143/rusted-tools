@@ -1,0 +1,14 @@
+# Test configuration with Docker MCP server
+
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[[mcp_servers]]
+name = "fetch"
+type = "local"
+command = "docker"
+args = ["run", "--rm", "-i", "mcp/fetch"]
+path = "fetch"
+auto_start = true
+restart_on_failure = true

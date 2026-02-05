@@ -1,0 +1,71 @@
+[server]
+host = "0.0.0.0"
+port = 3000
+
+[logging]
+level = "info"      # trace, debug, info, warn, error
+format = "pretty"   # pretty or json
+
+# Example: Remote MCP Server (Production)
+[[mcp_servers]]
+name = "microsoft-prod"
+type = "remote"
+url = "https://mcp.microsoft.com"
+path = "microsoft-prod"  # Accessible at /mcp/microsoft-prod/*
+
+# Optional tool filtering
+[mcp_servers.tools]
+include = ["search", "calendar", "mail"]
+# exclude = ["dangerous_tool"]
+
+# Example: Remote MCP Server (Development)
+[[mcp_servers]]
+name = "microsoft-dev"
+type = "remote"
+url = "https://dev.mcp.microsoft.com"
+path = "microsoft-dev"
+
+[mcp_servers.tools]
+exclude = ["experimental_feature"]
+
+# Example: Local MCP Server (SQLite)
+[[mcp_servers]]
+name = "sqlite-db"
+type = "local"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-sqlite", "--db-path", "./data.db"]
+path = "sqlite"
+auto_start = true
+restart_on_failure = true
+
+# Optional environment variables for local server
+[mcp_servers.env]
+DATABASE_URL = "sqlite://./data.db"
+LOG_LEVEL = "debug"
+
+# Optional tool filtering
+[mcp_servers.tools]
+include = ["query", "schema", "execute"]
+
+# Example: Local MCP Server (Filesystem)
+[[mcp_servers]]
+name = "filesystem"
+type = "local"
+command = "/usr/local/bin/mcp-filesystem"
+args = ["--root", "/home/user/documents"]
+path = "fs"
+auto_start = true
+restart_on_failure = false
+
+# Example: Multiple instances of the same server type
+[[mcp_servers]]
+name = "microsoft-user1"
+type = "remote"
+url = "https://mcp.microsoft.com"
+path = "microsoft-1"
+
+[[mcp_servers]]
+name = "microsoft-user2"
+type = "remote"
+url = "https://mcp.microsoft.com"
+path = "microsoft-2"
