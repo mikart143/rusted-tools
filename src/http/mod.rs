@@ -1,7 +1,6 @@
 pub mod handlers;
 pub mod mcp_sse_service;
 pub mod routes;
-pub mod sse;
 
 use crate::config::ProxyConfig;
 use crate::proxy::Router as ProxyRouter;

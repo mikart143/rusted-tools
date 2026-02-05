@@ -13,7 +13,6 @@ tokio-util = "0.7"
 
 # Web framework
 axum = { version = "0.8.8", features = ["json", "macros", "http1", "http2"] }
-axum-extra = { version = "0.12.5", features = ["typed-header"] }
 axum-reverse-proxy = "1.1.1"
 tower = "0.5.2"
 tower-http = { version = "0.6.8", features = ["cors", "trace"] }

@@ -3,7 +3,6 @@ use crate::proxy::{filter, Router};
 use crate::server::ServerManager;
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     response::IntoResponse,
     Json,
 };
@@ -111,44 +110,6 @@ pub async fn restart_server(
 
 // MCP-specific handlers
 
-pub async fn mcp_sse(Path(path): Path<String>) -> impl IntoResponse {
-    // SSE/HTTP transport for MCP protocol is not yet implemented
-    // 
-    // The proxy currently supports REST-style tool calling via:
-    // - GET /mcp/{path}/tools - List available tools
-    // - POST /mcp/{path}/tools/call - Call a specific tool
-    //
-    // For native MCP protocol support via SSE, use one of these approaches:
-    // 1. Connect directly to MCP servers (not through proxy)
-    // 2. Use the REST API endpoints instead
-    // 3. Wait for SSE implementation in a future release
-    //
-    // See: https://github.com/YOUR_REPO for documentation
-    
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({
-            "error": "SSE transport not implemented",
-            "message": "The MCP HTTP/SSE transport is not yet implemented. Use REST endpoints instead.",
-            "available_endpoints": {
-                "list_tools": format!("GET /mcp/{}/tools", path),
-                "call_tool": format!("POST /mcp/{}/tools/call", path)
-            },
-            "documentation": "See README for REST API usage"
-        }))
-    )
-}
-
-pub async fn mcp_messages(Path(_path): Path<String>) -> impl IntoResponse {
-    // MCP message handling will be added in a future enhancement
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({
-            "error": "MCP message endpoint not yet implemented"
-        })),
-    )
-}
-
 pub async fn mcp_list_tools(
     State(state): State<AppState>,
     Path(path): Path<String>,
@@ -194,6 +155,7 @@ pub async fn mcp_call_tool(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::http::StatusCode;
     use serde_json::Value;
 
     async fn create_test_state() -> AppState {
@@ -340,18 +302,6 @@ mod tests {
         let result = restart_server(State(state), Path("nonexistent".to_string())).await;
         
         assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_mcp_sse_not_implemented() {
-        let response = mcp_sse(Path("test".to_string())).await.into_response();
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
-    }
-
-    #[tokio::test]
-    async fn test_mcp_messages_not_implemented() {
-        let response = mcp_messages(Path("test".to_string())).await.into_response();
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
     }
 
     #[tokio::test]

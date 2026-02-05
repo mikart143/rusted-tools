@@ -210,11 +210,6 @@ impl McpClient {
         }
     }
 
-    /// Check if the client is initialized
-    pub async fn is_initialized(&self) -> bool {
-        self.service.read().await.is_some()
-    }
-
     /// Get server name
     pub fn server_name(&self) -> &str {
         &self.server_name
@@ -234,10 +229,14 @@ mod tests {
     #[tokio::test]
     async fn test_client_not_initialized() {
         let client = McpClient::new("test-server".to_string());
-        assert!(!client.is_initialized().await);
         
         // Attempting to use an uninitialized client should fail
         let result = client.list_tools().await;
         assert!(result.is_err());
+        
+        // Error should indicate client is not initialized
+        if let Err(e) = result {
+            assert!(e.to_string().contains("not initialized"));
+        }
     }
 }

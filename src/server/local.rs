@@ -89,13 +89,6 @@ impl LocalMcpServer {
         Ok(())
     }
 
-    /// Check if the server process is running
-    pub async fn is_running(&self) -> bool {
-        // Check if the client is initialized
-        // If the transport closes, the client will error on use
-        self.mcp_client.read().await.is_some()
-    }
-
     /// Get the MCP client for this server
     pub async fn get_client(&self) -> Result<McpClient> {
         let client_lock = self.mcp_client.read().await;
@@ -156,15 +149,19 @@ mod tests {
         
         // It might fail during initialization, which is expected
         if start_result.is_ok() {
-            assert!(server.is_running().await);
+            // Verify client is available after start
+            assert!(server.get_client().await.is_ok());
+            
             // Stop the server
             server.stop().await.unwrap();
-            assert!(!server.is_running().await);
+            
+            // After stop, client should be unavailable
+            assert!(server.get_client().await.is_err());
         }
     }
 
     #[tokio::test]
-    async fn test_is_running_after_process_exits() {
+    async fn test_process_exit_behavior() {
         let config = LocalServerConfig {
             command: "true".to_string(), // 'true' exits immediately
             args: vec![],
@@ -178,7 +175,7 @@ mod tests {
         // Wait a bit for the process to exit
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        // If the server was started, check if it's still running
-        // (it shouldn't be since 'true' exits immediately)
+        // Process exited, so client access will fail with transport error
+        // This is expected behavior for short-lived processes
     }
 }
