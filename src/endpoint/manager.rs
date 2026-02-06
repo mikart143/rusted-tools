@@ -7,6 +7,7 @@ use crate::error::{ProxyError, Result};
 use crate::mcp::McpClient;
 use dashmap::DashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -16,13 +17,19 @@ use tracing::{error, info, warn};
 pub struct EndpointManager {
     registry: EndpointRegistry,
     endpoints: Arc<DashMap<String, Arc<RwLock<EndpointKind>>>>,
+    restart_delay: Duration,
 }
 
 impl EndpointManager {
     pub fn new() -> Self {
+        Self::new_with_restart_delay(Duration::from_millis(500))
+    }
+
+    pub fn new_with_restart_delay(restart_delay: Duration) -> Self {
         Self {
             registry: EndpointRegistry::new(),
             endpoints: Arc::new(DashMap::new()),
+            restart_delay,
         }
     }
 
@@ -54,7 +61,7 @@ impl EndpointManager {
         self.registry
             .register(name.clone(), name.clone(), EndpointType::Local)?;
 
-        let local_config = config.to_local_settings();
+        let local_config = config.to_local_settings()?;
         let endpoint = LocalEndpoint::new(name.clone(), local_config);
         let endpoint_kind = EndpointKind::Local(endpoint);
         self.endpoints
@@ -151,7 +158,7 @@ impl EndpointManager {
     pub(crate) async fn restart_endpoint(&self, name: &str) -> Result<()> {
         info!("Restarting endpoint: {}", name);
         self.stop_endpoint(name).await?;
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        tokio::time::sleep(self.restart_delay).await;
         self.start_endpoint(name).await?;
         Ok(())
     }
@@ -226,7 +233,6 @@ mod tests {
                 args: vec!["hello".to_string()],
                 env: HashMap::new(),
                 auto_start: false,
-                restart_on_failure: false,
             },
             tools: None,
         };
@@ -248,7 +254,6 @@ mod tests {
                 args: vec!["hello".to_string()],
                 env: HashMap::new(),
                 auto_start: false,
-                restart_on_failure: false,
             },
             tools: None,
         };

@@ -1,3 +1,4 @@
+use crate::error::{ProxyError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -6,6 +7,8 @@ pub struct AppConfig {
     pub http: HttpConfig,
     #[serde(default)]
     pub logging: LoggingConfig,
+    #[serde(default)]
+    pub mcp: McpConfig,
     #[serde(default)]
     pub endpoints: Vec<EndpointConfig>,
 }
@@ -45,6 +48,23 @@ impl Default for LoggingConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct McpConfig {
+    #[serde(default = "default_request_timeout_secs")]
+    pub request_timeout_secs: u64,
+    #[serde(default = "default_restart_delay_ms")]
+    pub restart_delay_ms: u64,
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            request_timeout_secs: default_request_timeout_secs(),
+            restart_delay_ms: default_restart_delay_ms(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct EndpointConfig {
     pub name: String,
     #[serde(flatten)]
@@ -55,20 +75,21 @@ pub struct EndpointConfig {
 
 impl EndpointConfig {
     /// Extract local endpoint settings from this config
-    /// Panics if this is not a local endpoint config (should check type first)
-    pub(crate) fn to_local_settings(&self) -> LocalEndpointSettings {
+    pub(crate) fn to_local_settings(&self) -> Result<LocalEndpointSettings> {
         match &self.endpoint_type {
             EndpointKindConfig::Local {
                 command,
                 args,
                 env,
                 ..
-            } => LocalEndpointSettings {
+            } => Ok(LocalEndpointSettings {
                 command: command.clone(),
                 args: args.clone(),
                 env: env.clone(),
-            },
-            _ => panic!("Expected local endpoint configuration"),
+            }),
+            _ => Err(ProxyError::Config(
+                "Expected local endpoint configuration".to_string(),
+            )),
         }
     }
 }
@@ -83,8 +104,6 @@ pub enum EndpointKindConfig {
         env: HashMap<String, String>,
         #[serde(default = "default_auto_start")]
         auto_start: bool,
-        #[serde(default)]
-        restart_on_failure: bool,
     },
     Remote {
         url: String,
@@ -109,6 +128,14 @@ fn default_log_format() -> String {
 
 fn default_auto_start() -> bool {
     true
+}
+
+fn default_request_timeout_secs() -> u64 {
+    30
+}
+
+fn default_restart_delay_ms() -> u64 {
+    500
 }
 
 /// Local endpoint settings extracted from config

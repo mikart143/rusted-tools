@@ -39,10 +39,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 
 # Utilities
-futures = "0.3"
-async-trait = "0.1"
 dashmap = "6"
-once_cell = "1"
 dotenvy = "0.15"
 
 # CLI
@@ -50,6 +47,4 @@ clap = { version = "4", features = ["derive", "env"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
-httpmock = "0.7"
-serial_test = "3.0"
 tempfile = "3"

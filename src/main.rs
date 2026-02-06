@@ -91,16 +91,18 @@ fn init_logging(config: &config::LoggingConfig) -> Result<()> {
 fn print_banner(config: &config::AppConfig) {
     let version = env!("CARGO_PKG_VERSION");
     let authors = env!("CARGO_PKG_AUTHORS");
+    let width = 59usize;
+    let border = "═".repeat(width + 2);
+    let line = |content: &str| {
+        info!("║ {:width$} ║", content, width = width);
+    };
 
-    info!("╔═══════════════════════════════════════════════════════════╗");
-    info!("║                     RUSTED-TOOLS                          ║");
-    info!(
-        "║              MCP Proxy Server v{}                      ║",
-        version
-    );
-    info!("║                                                           ║");
-    info!("║  Author: {}                            ║", authors);
-    info!("╚═══════════════════════════════════════════════════════════╝");
+    info!("╔{}╗", border);
+    line("RUSTED-TOOLS");
+    line(&format!("MCP Proxy Server v{}", version));
+    line("");
+    line(&format!("Author: {}", authors));
+    info!("╚{}╝", border);
     info!("");
     info!("Server Configuration:");
     info!("  → Address: {}:{}", config.http.host, config.http.port);

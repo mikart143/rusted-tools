@@ -18,7 +18,7 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 #[derive(Clone)]
 pub(crate) struct McpClient {
     server_name: String,
-    service: Arc<RwLock<Option<RunningService<RoleClient, ()>>>>,
+    service: Arc<RwLock<Option<Arc<RunningService<RoleClient, ()>>>>>,
 }
 
 impl McpClient {
@@ -31,7 +31,7 @@ impl McpClient {
 
     async fn store_service(&self, service: RunningService<RoleClient, ()>) {
         let mut lock = self.service.write().await;
-        *lock = Some(service);
+        *lock = Some(Arc::new(service));
     }
 
     /// Initialize the MCP client with TokioChildProcess transport
@@ -100,53 +100,65 @@ impl McpClient {
 
     /// List available tools from the MCP server
     pub(crate) async fn list_tools(&self) -> Result<Vec<ToolDefinition>> {
-        let service_lock = self.service.read().await;
-        let service = service_lock
-            .as_ref()
-            .ok_or_else(|| ProxyError::ServerNotRunning(self.server_name.clone()))?;
+        let service = {
+            let service_lock = self.service.read().await;
+            service_lock
+                .as_ref()
+                .cloned()
+                .ok_or_else(|| ProxyError::ServerNotRunning(self.server_name.clone()))?
+        };
 
         debug!("Listing tools for server: {}", self.server_name);
 
-        let request = Some(PaginatedRequestParams {
-            meta: None,
-            cursor: None,
-        });
+        let mut tool_list = Vec::new();
+        let mut cursor: Option<String> = None;
 
-        match service.list_tools(request).await {
-            Ok(result) => {
-                let tool_list: Vec<ToolDefinition> = result
-                    .tools
-                    .into_iter()
-                    .map(|t| ToolDefinition {
+        loop {
+            let request = Some(PaginatedRequestParams {
+                meta: None,
+                cursor: cursor.clone(),
+            });
+
+            match service.list_tools(request).await {
+                Ok(result) => {
+                    tool_list.extend(result.tools.into_iter().map(|t| ToolDefinition {
                         name: t.name.to_string(),
                         description: t.description.map(|d| d.to_string()),
                         input_schema: Value::Object((*t.input_schema).clone()),
-                    })
-                    .collect();
+                    }));
 
-                debug!(
-                    "Found {} tools for server: {}",
-                    tool_list.len(),
-                    self.server_name
-                );
-                Ok(tool_list)
-            }
-            Err(e) => {
-                error!("Failed to list tools for {}: {}", self.server_name, e);
-                Err(ProxyError::McpProtocol(format!(
-                    "Failed to list tools: {}",
-                    e
-                )))
+                    cursor = result.next_cursor;
+                    if cursor.is_none() {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to list tools for {}: {}", self.server_name, e);
+                    return Err(ProxyError::McpProtocol(format!(
+                        "Failed to list tools: {}",
+                        e
+                    )));
+                }
             }
         }
+
+        debug!(
+            "Found {} tools for server: {}",
+            tool_list.len(),
+            self.server_name
+        );
+        Ok(tool_list)
     }
 
     /// Call a tool on the MCP server
     pub(crate) async fn call_tool(&self, request: ToolCallRequest) -> Result<ToolCallResponse> {
-        let service_lock = self.service.read().await;
-        let service = service_lock
-            .as_ref()
-            .ok_or_else(|| ProxyError::ServerNotRunning(self.server_name.clone()))?;
+        let service = {
+            let service_lock = self.service.read().await;
+            service_lock
+                .as_ref()
+                .cloned()
+                .ok_or_else(|| ProxyError::ServerNotRunning(self.server_name.clone()))?
+        };
 
         debug!(
             "Calling tool '{}' on server: {}",

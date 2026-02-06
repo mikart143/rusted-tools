@@ -11,7 +11,6 @@ format = "pretty"
 name = "microsoft-learn"
 type = "remote"
 url = "https://learn.microsoft.com/api/mcp"
-path = "microsoft-learn"
 
 
 [[endpoints]]
@@ -19,6 +18,4 @@ name = "time"
 type = "local"
 command = "docker"
 args = ["run", "--rm", "-i", "mcp/time"]
-path = "time"
 auto_start = true
-restart_on_failure = true

@@ -25,16 +25,7 @@ pub fn load_config<P: AsRef<Path>>(path: P) -> Result<AppConfig> {
 
 /// Validate the loaded configuration
 fn validate_config(config: &AppConfig) -> Result<()> {
-    // Validate that endpoint paths are unique
-    let mut paths = std::collections::HashSet::new();
-    for endpoint in &config.endpoints {
-        let path = endpoint.name.clone();
-        if !paths.insert(path.clone()) {
-            anyhow::bail!("Duplicate endpoint path '{}' found in configuration", path);
-        }
-    }
-
-    // Validate that endpoint names are unique
+    // Validate that endpoint names/paths are unique
     let mut names = std::collections::HashSet::new();
     for endpoint in &config.endpoints {
         if !names.insert(endpoint.name.clone()) {
@@ -76,6 +67,14 @@ fn validate_config(config: &AppConfig) -> Result<()> {
         );
     }
 
+    // Validate MCP request timeout
+    if config.mcp.request_timeout_secs < 5 {
+        anyhow::bail!(
+            "Invalid mcp.request_timeout_secs: {}. Minimum value is 5 seconds",
+            config.mcp.request_timeout_secs
+        );
+    }
+
     Ok(())
 }
 
@@ -101,7 +100,6 @@ name = "test-server"
 type = "local"
 command = "echo"
 args = ["hello"]
-path = "test"
 "#;
 
         let mut temp_file = NamedTempFile::with_suffix(".toml").unwrap();
@@ -145,6 +143,7 @@ args = ["hello"]
         let config = AppConfig {
             http: HttpConfig::default(),
             logging: LoggingConfig::default(),
+            mcp: Default::default(),
             endpoints: vec![
                 EndpointConfig {
                     name: "server".to_string(),
@@ -153,7 +152,6 @@ args = ["hello"]
                         args: vec![],
                         env: Default::default(),
                         auto_start: true,
-                        restart_on_failure: false,
                     },
                     tools: None,
                 },
@@ -164,7 +162,6 @@ args = ["hello"]
                         args: vec![],
                         env: Default::default(),
                         auto_start: true,
-                        restart_on_failure: false,
                     },
                     tools: None,
                 },
@@ -179,6 +176,7 @@ args = ["hello"]
         let config = AppConfig {
             http: HttpConfig::default(),
             logging: LoggingConfig::default(),
+            mcp: Default::default(),
             endpoints: vec![EndpointConfig {
                 name: "server/path".to_string(),
                 endpoint_type: EndpointKindConfig::Local {
@@ -186,7 +184,6 @@ args = ["hello"]
                     args: vec![],
                     env: Default::default(),
                     auto_start: true,
-                    restart_on_failure: false,
                 },
                 tools: None,
             }],

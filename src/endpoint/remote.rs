@@ -97,8 +97,9 @@ impl RemoteEndpoint {
         );
         let client = McpClient::new(self.name.clone());
         client.init_with_http(&self.url).await?;
+        self.client_holder.set(client).await;
 
-        Ok(Arc::new(client))
+        self.client_holder.get(&self.name).await
     }
 
     pub(crate) async fn attach_http_route<S>(
@@ -150,7 +151,6 @@ mod tests {
                 args: vec![],
                 env: Default::default(),
                 auto_start: false,
-                restart_on_failure: false,
             },
             tools: None,
         };

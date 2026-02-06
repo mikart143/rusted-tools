@@ -92,7 +92,6 @@ mod tests {
                 args: vec![],
                 env: HashMap::new(),
                 auto_start: false,
-                restart_on_failure: false,
             },
             tools: Some(ToolFilter {
                 include: Some(vec!["tool1".to_string()]),

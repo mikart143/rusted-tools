@@ -44,7 +44,6 @@ src/
 │   └── tool_filter.rs   # Tool include/exclude filtering
 └── endpoint/            # Endpoint lifecycle (renamed from server/)
     ├── mod.rs           # EndpointKind enum dispatch
-    ├── traits.rs        # EndpointInstance async trait definition
     ├── manager.rs       # EndpointManager lifecycle orchestration (DashMap)
     ├── registry.rs      # EndpointRegistry, EndpointInfo, EndpointStatus
     ├── local.rs         # LocalEndpoint (subprocess via TokioChildProcess)
@@ -56,7 +55,7 @@ tests/
 
 ## Architecture
 
-- **Polymorphic endpoints**: `EndpointKind` enum wraps `LocalEndpoint` and `RemoteEndpoint`, implements `EndpointInstance` trait via match dispatch
+- **Polymorphic endpoints**: `EndpointKind` enum wraps `LocalEndpoint` and `RemoteEndpoint`, with match-based dispatch for shared lifecycle methods
 - **Concurrency**: `DashMap` for lock-free concurrent collections (EndpointManager, PathRouter); `Arc<RwLock<>>` for shared mutable state on individual resources
 - **HTTP layer**: Axum 0.8 with `ApiState` shared via `State` extractor; CORS and tracing middleware
 - **Graceful shutdown**: `CancellationToken` + `tokio::signal` (SIGTERM, SIGINT)
@@ -65,12 +64,12 @@ tests/
 ## Code Conventions
 
 - **Error handling**: `ProxyError` enum with `thiserror` — each variant maps to an HTTP status code. `anyhow` used only in config loading. Custom `Result<T>` type alias in `error.rs`.
-- **Async**: tokio runtime, `#[async_trait]` for trait methods, `#[tokio::test]` for async tests
+- **Async**: tokio runtime, `#[tokio::test]` for async tests
 - **Serialization**: serde derives on all config/API types. `#[serde(tag = "type", rename_all = "lowercase")]` for tagged enum variants. TOML for config files.
 - **Logging**: `tracing` crate (`info!`, `debug!`, `warn!`, `error!`). Configured via `tracing-subscriber` with env-filter, supports JSON and pretty formats.
 - **Module pattern**: `mod.rs` files re-export public items. `lib.rs` exposes top-level modules. `#[allow(unused_imports)]` on conditional re-exports.
 - **Naming**: PascalCase types, snake_case functions/modules, UPPER_CASE constants
-- **Testing**: `#[cfg(test)] mod tests` inline in each module. Integration tests use `axum::body::Body` + `tower::ServiceExt::oneshot`. Dev deps: httpmock, serial_test, tempfile.
+- **Testing**: `#[cfg(test)] mod tests` inline in each module. Integration tests use `axum::body::Body` + `tower::ServiceExt::oneshot`. Dev deps: tempfile.
 - **No rustfmt.toml or clippy.toml** — uses Rust 2021 edition defaults
 
 ## Key Types
@@ -79,17 +78,17 @@ tests/
 |------|--------|---------|
 | `AppConfig` | config | Top-level config (TOML root) |
 | `HttpConfig` | config | HTTP server settings (`[http]`) |
+| `McpConfig` | config | MCP settings (`[mcp]`): `request_timeout_secs` (default: 30s, min: 5s), `restart_delay_ms` (default: 500ms) |
 | `EndpointConfig` | config | Single endpoint config (`[[endpoints]]`) |
 | `EndpointKindConfig` | config | Local vs Remote discriminator |
 | `EndpointKind` | endpoint | Runtime enum: LocalEndpoint / RemoteEndpoint |
-| `EndpointInstance` | endpoint | Async trait for endpoint lifecycle |
 | `EndpointManager` | endpoint | Lifecycle orchestration (start/stop/restart) |
 | `EndpointRegistry` | endpoint | Metadata registry (DashMap-based) |
-| `McpClient` | mcp | rmcp RunningService wrapper |
-| `StdioBridge` | mcp | stdio-to-HTTP/SSE ServerHandler bridge |
+| `McpClient` | mcp | rmcp RunningService wrapper with pagination support |
+| `StdioBridge` | mcp | stdio-to-HTTP/SSE ServerHandler bridge (ServerHandler impl) |
 | `ToolDefinition` | mcp | MCP tool metadata |
 | `PathRouter` | routing | URL path to endpoint routing |
-| `ApiState` | api | Shared Axum handler state |
+| `ApiState` | api | Shared Axum handler state with mcp_request_timeout |
 
 ## Key Dependencies
 
@@ -108,4 +107,15 @@ tests/
 
 ## Configuration
 
-TOML format with sections: `[http]`, `[logging]`, `[[endpoints]]`. Validated at load time (unique names/paths, valid log levels). See `config.toml` for reference.
+TOML format with sections: `[http]`, `[logging]`, `[mcp]`, `[[endpoints]]`. Validated at load time:
+- Unique endpoint names and valid path characters
+- Valid log levels (trace, debug, info, warn, error) and formats (pretty, json)
+- MCP `request_timeout_secs` >= 5 seconds (default: 30 seconds)
+
+Example `[mcp]` section:
+```toml
+[mcp]
+request_timeout_secs = 30
+```
+
+See `config.toml` and `examples/*.toml` for reference configurations.

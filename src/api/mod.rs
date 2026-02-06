@@ -9,6 +9,7 @@ use anyhow::Result;
 use axum::Router;
 use handlers::ApiState;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;
@@ -17,7 +18,9 @@ pub async fn start_server(config: AppConfig) -> Result<()> {
     let addr = format!("{}:{}", config.http.host, config.http.port);
 
     // Initialize endpoint manager
-    let manager = Arc::new(EndpointManager::new());
+    let manager = Arc::new(EndpointManager::new_with_restart_delay(
+        Duration::from_millis(config.mcp.restart_delay_ms),
+    ));
     manager.init_from_config(config.endpoints.clone()).await?;
 
     // Initialize router
@@ -31,6 +34,7 @@ pub async fn start_server(config: AppConfig) -> Result<()> {
     let state = ApiState {
         manager: manager.clone(),
         router,
+        mcp_request_timeout: Duration::from_secs(config.mcp.request_timeout_secs),
     };
 
     // Build the application
@@ -141,5 +145,60 @@ async fn shutdown_signal(manager: Arc<EndpointManager>) {
     // Gracefully shutdown all endpoints
     if let Err(e) = manager.shutdown().await {
         tracing::error!("Error during shutdown: {}", e);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{EndpointConfig, EndpointKindConfig, HttpConfig, LoggingConfig, McpConfig};
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_sse_route_attached_for_remote_endpoint() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        let manager = Arc::new(EndpointManager::new());
+        let config = AppConfig {
+            http: HttpConfig::default(),
+            logging: LoggingConfig::default(),
+            mcp: McpConfig::default(),
+            endpoints: vec![EndpointConfig {
+                name: "remote-stub".to_string(),
+                endpoint_type: EndpointKindConfig::Remote {
+                    url: "http://127.0.0.1:19876".to_string(),
+                },
+                tools: None,
+            }],
+        };
+
+        manager
+            .init_from_config(config.endpoints.clone())
+            .await
+            .unwrap();
+
+        let router = Arc::new(PathRouter::new(manager.clone()));
+        router.init_from_config(&config.endpoints).unwrap();
+
+        let state = ApiState {
+            manager,
+            router,
+            mcp_request_timeout: Duration::from_secs(config.mcp.request_timeout_secs),
+        };
+
+        let app = build_router(state).await.unwrap();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/mcp/remote-stub")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_ne!(response.status(), StatusCode::NOT_FOUND);
     }
 }

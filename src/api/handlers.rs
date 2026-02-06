@@ -8,6 +8,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::info;
 
 /// Application state shared across handlers
@@ -15,6 +16,7 @@ use tracing::info;
 pub struct ApiState {
     pub manager: Arc<EndpointManager>,
     pub router: Arc<PathRouter>,
+    pub mcp_request_timeout: Duration,
 }
 
 pub(crate) async fn health_check() -> impl IntoResponse {
@@ -117,7 +119,14 @@ pub(crate) async fn mcp_list_tools(
     let (client, filter) = state.router.get_client(&path).await?;
 
     // Call list_tools on the actual MCP client
-    let tools = client.list_tools().await?;
+    let tools = tokio::time::timeout(state.mcp_request_timeout, client.list_tools())
+        .await
+        .map_err(|_| {
+            ProxyError::McpProtocol(format!(
+                "MCP request timed out after {:?}",
+                state.mcp_request_timeout
+            ))
+        })??;
 
     // Apply filter using the centralized function
     let filtered_tools = tool_filter::apply_tool_filter(tools, filter.as_ref());
@@ -146,7 +155,14 @@ pub(crate) async fn mcp_call_tool(
     }
 
     // Call the tool
-    let response = client.call_tool(request).await?;
+    let response = tokio::time::timeout(state.mcp_request_timeout, client.call_tool(request))
+        .await
+        .map_err(|_| {
+            ProxyError::McpProtocol(format!(
+                "MCP request timed out after {:?}",
+                state.mcp_request_timeout
+            ))
+        })??;
     Ok(Json(json!(response)))
 }
 
@@ -160,6 +176,7 @@ mod tests {
         // Use a simple inline config for unit tests
         use crate::config::{EndpointConfig, EndpointKindConfig};
         use std::collections::HashMap;
+        use std::time::Duration;
 
         let manager = Arc::new(EndpointManager::new());
 
@@ -171,7 +188,6 @@ mod tests {
                     args: vec!["hello".to_string()],
                     env: HashMap::new(),
                     auto_start: true,
-                    restart_on_failure: false,
                 },
                 tools: None,
             },
@@ -189,7 +205,11 @@ mod tests {
         let router = Arc::new(PathRouter::new(manager.clone()));
         router.init_from_config(&configs).unwrap();
 
-        ApiState { manager, router }
+        ApiState {
+            manager,
+            router,
+            mcp_request_timeout: Duration::from_secs(30),
+        }
     }
 
     #[tokio::test]

@@ -34,7 +34,6 @@ A high-performance Model Context Protocol (MCP) proxy server written in Rust tha
 - 🚀 **Multi-Server Management**: Run and manage multiple MCP servers simultaneously
 - 🔧 **Multiple Server Types**: Support for local (Node.js, Docker, stdio-based) and remote (HTTP/SSE) MCP servers
 - 🌐 **REST API**: Access MCP tools through simple HTTP endpoints
-- 🔄 **Auto-Restart**: Automatic server recovery on failure
 - 📊 **Server Monitoring**: Health checks and status tracking
 - 🛡️ **Tool Filtering**: Optional allowlist/blocklist for tool access control (local servers)
 - ⚡ **High Performance**: Built with Rust and Tokio for maximum efficiency
@@ -95,30 +94,36 @@ The binary will be at `./target/release/rusted-tools`
 
 **config.toml:**
 ```toml
-[server]
+[http]
 host = "127.0.0.1"
 port = 3000
 
+[logging]
+level = "info"
+format = "pretty"
+
+[mcp]
+request_timeout_secs = 30
+restart_delay_ms = 500
+
 # Memory/Knowledge Graph Server (Node.js)
-[[mcp_servers]]
+[[endpoints]]
 name = "memory"
 type = "local"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-memory"]
 auto_start = true
-restart_on_failure = true
 
 # Web Fetch Server (Docker)
-[[mcp_servers]]
+[[endpoints]]
 name = "fetch"
 type = "local"
 command = "docker"
 args = ["run", "--rm", "-i", "mcp/fetch"]
 auto_start = true
-restart_on_failure = false
 
 # Remote MCP Server (HTTP/SSE)
-[[mcp_servers]]
+[[endpoints]]
 name = "microsoft-learn"
 type = "remote"
 url = "https://learn.microsoft.com/api/mcp"
@@ -140,7 +145,7 @@ Output:
 
 **List All Servers:**
 ```bash
-curl http://localhost:3000/api/servers | jq .
+curl http://localhost:3000/servers | jq .
 ```
 
 **List Tools on a Server:**
@@ -174,11 +179,11 @@ curl -X POST http://localhost:3000/mcp/memory/tools/call \
 |--------|----------|-------------|
 | GET | `/health` | Health check |
 | GET | `/info` | Server information |
-| GET | `/api/servers` | List all configured servers |
-| GET | `/api/servers/{name}/status` | Get server status |
-| POST | `/api/servers/{name}/start` | Start a server |
-| POST | `/api/servers/{name}/stop` | Stop a server |
-| POST | `/api/servers/{name}/restart` | Restart a server |
+| GET | `/servers` | List all configured servers |
+| GET | `/servers/{name}/status` | Get server status |
+| POST | `/servers/{name}/start` | Start a server |
+| POST | `/servers/{name}/stop` | Stop a server |
+| POST | `/servers/{name}/restart` | Restart a server |
 
 ### MCP Tool Endpoints
 
@@ -225,28 +230,31 @@ curl -X POST http://localhost:3000/mcp/memory/tools/call \
 ### Server Configuration
 
 ```toml
-[server]
+[http]
 host = "127.0.0.1"    # Listen address (default: 127.0.0.1)
 port = 3000           # Listen port (default: 3000)
 
 [logging]
 level = "info"        # Log level: trace, debug, info, warn, error
 format = "pretty"     # Format: pretty or json
+
+[mcp]
+request_timeout_secs = 30  # Default tool request timeout
+restart_delay_ms = 500     # Delay between stop/start on restart
 ```
 
 ### Local MCP Server Configuration
 
 ```toml
-[[mcp_servers]]
+[[endpoints]]
 name = "server-name"          # Unique identifier (becomes URL path: /mcp/{name})
 type = "local"                # Server type: local or remote
 command = "npx"               # Command to execute
 args = ["-y", "package"]      # Command arguments
 auto_start = true             # Start on proxy startup
-restart_on_failure = true     # Auto-restart if crashed
 
 # Optional: Tool filtering (local servers only)
-[mcp_servers.tools]
+[endpoints.tools]
 include = ["create_*", "read_*"]  # Allowlist patterns (optional)
 exclude = ["dangerous_*"]         # Blocklist patterns (optional)
 ```
@@ -254,7 +262,7 @@ exclude = ["dangerous_*"]         # Blocklist patterns (optional)
 ### Remote MCP Server Configuration
 
 ```toml
-[[mcp_servers]]
+[[endpoints]]
 name = "remote-server"                      # Unique identifier (becomes URL path: /mcp/{name})
 type = "remote"                             # Must be: remote
 url = "https://learn.microsoft.com/api/mcp" # Base URL of remote server
@@ -376,7 +384,6 @@ graph TD
 - Lifecycle management (start, stop, restart)
 - Server registry and discovery
 - Configuration loading and validation
-- Auto-restart on failure
 
 #### Path Router
 - Maps request paths to endpoints
@@ -388,7 +395,6 @@ graph TD
 - Communicates via stdio (standard input/output)
 - Converts stdio ↔ HTTP/SSE
 - Implements tool filtering
-- Auto-restart capability
 
 #### Remote Endpoint (ReverseProxy)
 - Forwards HTTP/SSE requests transparently
@@ -504,7 +510,7 @@ graph TD
 ### Configuration
 
 ```toml
-[[mcp_servers]]
+[[endpoints]]
 name = "microsoft-learn"
 type = "remote"
 url = "https://learn.microsoft.com/api/mcp"  # Base URL of remote server
@@ -537,7 +543,7 @@ url = "https://learn.microsoft.com/api/mcp"  # Base URL of remote server
 
 **Configuration:**
 ```toml
-[[mcp_servers]]
+[[endpoints]]
 name = "microsoft-learn"
 type = "remote"
 url = "https://learn.microsoft.com/api/mcp"
@@ -646,7 +652,7 @@ Authorization: Bearer abc123
 
 **Issue: 404 Not Found**
 - Check path in config matches URL: `/mcp/{path}`
-- Verify server is registered in `/api/servers` endpoint
+- Verify server is registered in `/servers` endpoint
 
 **Issue: Connection Refused**
 - Check remote server URL is accessible

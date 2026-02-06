@@ -1,4 +1,5 @@
 use thiserror::Error;
+use tracing::error;
 
 #[derive(Error, Debug)]
 pub enum ProxyError {
@@ -65,7 +66,18 @@ impl ProxyError {
 // Implement conversion from anyhow::Error for convenience
 impl From<anyhow::Error> for ProxyError {
     fn from(err: anyhow::Error) -> Self {
-        ProxyError::Internal(err.to_string())
+        // Log the full error chain for diagnostics
+        error!("Internal error chain: {:#}", err);
+        // Preserve the chain details in the message for better diagnostics downstream
+        let chain: Vec<String> = std::iter::once(err.to_string())
+            .chain(err.chain().skip(1).map(|e| e.to_string()))
+            .collect();
+        let detailed_msg = if chain.len() > 1 {
+            format!("{} (cause: {})", chain[0], chain[1..].join(" <- "))
+        } else {
+            chain[0].clone()
+        };
+        ProxyError::Internal(detailed_msg)
     }
 }
 

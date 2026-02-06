@@ -10,9 +10,7 @@ name = "memory"
 type = "local"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-memory"]
-path = "memory"
 auto_start = true
-restart_on_failure = true
 
 # Web Fetch Server (Docker)
 [[endpoints]]
@@ -20,6 +18,4 @@ name = "fetch"
 type = "local"
 command = "docker"
 args = ["run", "--rm", "-i", "mcp/fetch"]
-path = "fetch"
 auto_start = true
-restart_on_failure = false

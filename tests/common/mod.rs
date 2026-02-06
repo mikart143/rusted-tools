@@ -1,11 +1,11 @@
 use axum::Router;
 use rusted_tools::{
     api::handlers::ApiState,
-    config::{AppConfig, EndpointConfig, EndpointKindConfig, HttpConfig},
+    config::{AppConfig, EndpointConfig, EndpointKindConfig, HttpConfig, McpConfig},
     endpoint::EndpointManager,
     routing::PathRouter,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 // ──────────────────────────────────────────────
 // Tier 1: Offline configs (no real MCP servers)
@@ -20,6 +20,7 @@ pub fn create_offline_config() -> AppConfig {
             port: 3000,
         },
         logging: Default::default(),
+        mcp: McpConfig::default(),
         endpoints: vec![
             EndpointConfig {
                 name: "local-stub".to_string(),
@@ -28,7 +29,6 @@ pub fn create_offline_config() -> AppConfig {
                     args: vec![],
                     env: HashMap::new(),
                     auto_start: false,
-                    restart_on_failure: false,
                 },
                 tools: None,
             },
@@ -55,6 +55,7 @@ pub fn create_live_remote_config() -> AppConfig {
             port: 3000,
         },
         logging: Default::default(),
+        mcp: McpConfig::default(),
         endpoints: vec![EndpointConfig {
             name: "microsoft-learn".to_string(),
             endpoint_type: EndpointKindConfig::Remote {
@@ -73,6 +74,7 @@ pub fn create_live_local_config() -> AppConfig {
             port: 3000,
         },
         logging: Default::default(),
+        mcp: McpConfig::default(),
         endpoints: vec![EndpointConfig {
             name: "time".to_string(),
             endpoint_type: EndpointKindConfig::Local {
@@ -85,7 +87,6 @@ pub fn create_live_local_config() -> AppConfig {
                 ],
                 env: HashMap::new(),
                 auto_start: false,
-                restart_on_failure: false,
             },
             tools: None,
         }],
@@ -100,6 +101,7 @@ pub fn create_live_full_config() -> AppConfig {
             port: 3000,
         },
         logging: Default::default(),
+        mcp: McpConfig::default(),
         endpoints: vec![
             EndpointConfig {
                 name: "microsoft-learn".to_string(),
@@ -120,7 +122,6 @@ pub fn create_live_full_config() -> AppConfig {
                     ],
                     env: HashMap::new(),
                     auto_start: false,
-                    restart_on_failure: false,
                 },
                 tools: None,
             },
@@ -134,7 +135,9 @@ pub fn create_live_full_config() -> AppConfig {
 
 /// Build a test Router from the given config (no HTTP server, uses tower::oneshot).
 pub async fn build_test_app(config: &AppConfig) -> Router {
-    let manager = Arc::new(EndpointManager::new());
+    let manager = Arc::new(EndpointManager::new_with_restart_delay(
+        Duration::from_millis(config.mcp.restart_delay_ms),
+    ));
     manager
         .init_from_config(config.endpoints.clone())
         .await
@@ -143,7 +146,11 @@ pub async fn build_test_app(config: &AppConfig) -> Router {
     let router = Arc::new(PathRouter::new(manager.clone()));
     router.init_from_config(&config.endpoints).unwrap();
 
-    let state = ApiState { manager, router };
+    let state = ApiState {
+        manager,
+        router,
+        mcp_request_timeout: Duration::from_secs(config.mcp.request_timeout_secs),
+    };
 
     Router::new()
         .merge(rusted_tools::api::routes::health_routes())

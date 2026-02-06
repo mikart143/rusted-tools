@@ -9,6 +9,4 @@ name = "memory"
 type = "local"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-memory"]
-path = "memory"
 auto_start = true
-restart_on_failure = true
