@@ -354,30 +354,25 @@ Full HTTP/SSE transport support is planned for a future release. This will enabl
 
 ### High-Level Design
 
-```
-Clients (VS Code, etc.)
-    ↓
-┌─────────────────────────────────────┐
-│   Rusted-Tools MCP Proxy            │
-│   (Rust + Tokio + Axum)             │
-├─────────────────────────────────────┤
-│  HTTP/REST API Layer                │
-│  - Server management                │
-│  - Health checks                    │
-│  - Tool listing & calling           │
-├─────────────────────────────────────┤
-│  Routing Layer                      │
-│  - Path-based routing               │
-│  - Server discovery                 │
-├─────────────────────────────────────┤
-│  Endpoint Layer                     │
-│  ├─ Local: McpBridgeServer          │
-│  │  (stdio subprocess ↔ SSE)        │
-│  └─ Remote: ReverseProxy            │
-│     (HTTP/SSE ↔ HTTP/SSE)           │
-└─────────────────────────────────────┘
-    ↓
-Local & Remote MCP Servers
+```mermaid
+graph TD
+    A["Clients (VS Code, etc.)"]
+    B["<b>Rusted-Tools MCP Proxy</b><br/>(Rust + Tokio + Axum)"]
+    C["<b>HTTP/REST API Layer</b><br/>Server management<br/>Health checks<br/>Tool listing & calling"]
+    D["<b>Routing Layer</b><br/>Path-based routing<br/>Server discovery"]
+    E["<b>Endpoint Layer</b>"]
+    E1["Local: McpBridgeServer<br/>(stdio ↔ SSE)"]
+    E2["Remote: ReverseProxy<br/>(HTTP/SSE ↔ HTTP/SSE)"]
+    F["Local & Remote MCP Servers"]
+    
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> E1
+    E --> E2
+    E1 --> F
+    E2 --> F
 ```
 
 ### Key Components
@@ -425,20 +420,16 @@ The Model Context Protocol over HTTP uses Server-Sent Events (SSE) for bidirecti
 
 ### Request/Response Flow
 
-```
-Client                    Proxy                     Remote MCP Server
-  |                         |                              |
-  |-- POST /mcp/path ------>|                              |
-  |    (JSON-RPC request)   |                              |
-  |                         |-- Forward POST ------------>|
-  |                         |    (same request)            |
-  |                         |                              |
-  |                         |<-- SSE Response ------------|
-  |<-- SSE Response --------|    (event: message)         |
-  |    (proxied through)    |    (data: JSON-RPC)         |
-  |                         |                              |
-```
-
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Proxy as Rusted-Tools Proxy
+    participant Remote as Remote MCP Server
+    
+    Client->>Proxy: POST /mcp/path<br/>(JSON-RPC request)
+    Proxy->>Remote: Forward POST<br/>(same request)
+    Remote-->>Proxy: SSE Response<br/>(event: message)
+    Proxy-->>Client: SSE Response<br/>(proxied through)<br/>(data: JSON-RPC)
 ### MCP Message Format
 
 MCP uses JSON-RPC 2.0 over SSE.
@@ -499,46 +490,20 @@ We just need to **forward requests** to the right place!
 
 ### Architecture
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                      VS Code MCP Client                       │
-│  - Sends JSON-RPC over HTTP POST                              │
-│  - Receives SSE streaming responses                           │
-└────────────┬─────────────────────────────────────────────────┘
-             │
-             │ HTTP/SSE
-             │
-┌────────────▼──────────────────────────────────────────────────┐
-│              Rusted-Tools Proxy (Port 3000)                   │
-│                                                                │
-│  ┌───────────────────────────────────────────────────────┐   │
-│  │  Router Layer (Axum)                                  │   │
-│  │  - Routes: /mcp/{path}/*                              │   │
-│  └────────────────┬────────────────────────────────────┘   │
-│                   │                                          │
-│  ┌────────────────▼────────────────────────────────────┐   │
-│  │  Server Type Detection                              │   │
-│  │  - Local → McpBridgeServer (stdio → SSE)            │   │
-│  │  - Remote → ReverseProxy (HTTP/SSE → HTTP/SSE)      │   │
-│  └────────────────┬────────────────────────────────────┘   │
-│                   │                                          │
-│  ┌────────────────▼────────────────────────────────────┐   │
-│  │  axum-reverse-proxy                                 │   │
-│  │  - Forwards all HTTP methods                         │   │
-│  │  - Preserves headers (auth, content-type)            │   │
-│  │  - Streams SSE responses                             │   │
-│  │  - Handles WebSocket upgrades                        │   │
-│  └────────────────┬────────────────────────────────────┘   │
-└───────────────────┼──────────────────────────────────────────┘
-                    │
-                    │ HTTP/SSE (forwarded)
-                    │
-┌───────────────────▼────────────────────────────────────────┐
-│         Remote MCP Server (e.g., Microsoft Learn)          │
-│  - Receives standard MCP HTTP/SSE requests                 │
-│  - Returns SSE responses with JSON-RPC messages            │
-│  - URL: https://learn.microsoft.com/api/mcp                │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    A["<b>VS Code MCP Client</b><br/>Sends JSON-RPC over HTTP POST<br/>Receives SSE streaming responses"]
+    B["<b>Rusted-Tools Proxy</b><br/>(Port 3000)"]
+    C["<b>Router Layer</b> Axum<br/>Routes: /mcp/{path}/*"]
+    D["<b>Server Type Detection</b><br/>Local → McpBridgeServer<br/>Remote → ReverseProxy"]
+    E["<b>axum-reverse-proxy</b><br/>Forwards all HTTP methods<br/>Preserves headers<br/>Streams SSE responses<br/>Handles WebSocket upgrades"]
+    F["<b>Remote MCP Server</b><br/>e.g., Microsoft Learn<br/>Receives standard MCP HTTP/SSE<br/>Returns SSE responses<br/>URL: learn.microsoft.com/api/mcp"]
+    
+    A -->|HTTP/SSE| B
+    B --> C
+    C --> D
+    D --> E
+    E -->|HTTP/SSE forwarded| F
 ```
 
 ### Configuration
