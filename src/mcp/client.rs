@@ -6,8 +6,13 @@ use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::ServiceExt;
 use serde_json::Value;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
+
+/// Default timeout for MCP handshake initialization.
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A wrapper around rmcp RunningService for the proxy
 #[derive(Clone)]
@@ -33,7 +38,21 @@ impl McpClient {
     pub(crate) async fn init_with_transport(&self, transport: TokioChildProcess) -> Result<()> {
         info!("Initializing MCP client for server: {}", self.server_name);
 
-        let service = ().serve(transport).await.map_err(|e| {
+        let ct = CancellationToken::new();
+        let ct_clone = ct.clone();
+
+        let service = tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
+            ().serve_with_ct(transport, ct_clone).await
+        })
+        .await
+        .map_err(|_| {
+            ct.cancel();
+            ProxyError::McpProtocol(format!(
+                "MCP handshake timed out after {:?} for server: {}",
+                HANDSHAKE_TIMEOUT, self.server_name
+            ))
+        })?
+        .map_err(|e| {
             ProxyError::McpProtocol(format!("Failed to initialize MCP client: {:?}", e))
         })?;
 
@@ -52,7 +71,21 @@ impl McpClient {
 
         let transport = StreamableHttpClientTransport::from_uri(url);
 
-        let service = ().serve(transport).await.map_err(|e| {
+        let ct = CancellationToken::new();
+        let ct_clone = ct.clone();
+
+        let service = tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
+            ().serve_with_ct(transport, ct_clone).await
+        })
+        .await
+        .map_err(|_| {
+            ct.cancel();
+            ProxyError::McpProtocol(format!(
+                "MCP handshake timed out after {:?} for server: {} at {}",
+                HANDSHAKE_TIMEOUT, self.server_name, url
+            ))
+        })?
+        .map_err(|e| {
             ProxyError::McpProtocol(format!("Failed to initialize MCP HTTP client: {:?}", e))
         })?;
 

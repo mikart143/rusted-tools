@@ -235,14 +235,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_start_and_stop_endpoint() {
+    async fn test_start_endpoint_fails_with_non_mcp_process() {
         let manager = EndpointManager::new();
 
         let config = EndpointConfig {
-            name: "test-cat".to_string(),
+            name: "test-echo".to_string(),
             endpoint_type: EndpointKindConfig::Local {
-                command: "cat".to_string(),
-                args: vec![],
+                command: "echo".to_string(),
+                args: vec!["hello".to_string()],
                 env: HashMap::new(),
                 auto_start: false,
                 restart_on_failure: false,
@@ -253,13 +253,11 @@ mod tests {
 
         manager.init_from_config(vec![config]).await.unwrap();
 
-        manager.start_endpoint("test-cat").await.unwrap();
-        let info = manager.get_endpoint_info("test-cat").unwrap();
-        assert_eq!(info.status, EndpointStatus::Running);
+        let result = manager.start_endpoint("test-echo").await;
+        assert!(result.is_err(), "start should fail for non-MCP process");
 
-        manager.stop_endpoint("test-cat").await.unwrap();
-        let info = manager.get_endpoint_info("test-cat").unwrap();
-        assert_eq!(info.status, EndpointStatus::Stopped);
+        let info = manager.get_endpoint_info("test-echo").unwrap();
+        assert_eq!(info.status, EndpointStatus::Failed);
     }
 
     #[tokio::test]

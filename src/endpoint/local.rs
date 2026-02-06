@@ -128,24 +128,23 @@ mod tests {
     use std::collections::HashMap;
 
     #[tokio::test]
-    async fn test_start_and_stop_cat_server() {
+    async fn test_start_fails_with_non_mcp_process() {
         let config = LocalEndpointSettings {
-            command: "cat".to_string(),
-            args: vec![],
+            command: "echo".to_string(),
+            args: vec!["not-an-mcp-server".to_string()],
             env: HashMap::new(),
             path: "test".to_string(),
             restart_on_failure: false,
         };
 
-        let mut endpoint = LocalEndpoint::new("test-cat".to_string(), config);
+        let mut endpoint = LocalEndpoint::new("test-echo".to_string(), config);
 
         let start_result = endpoint.start().await;
-
-        if start_result.is_ok() {
-            assert!(endpoint.get_client().await.is_ok());
-            endpoint.stop().await.unwrap();
-            assert!(endpoint.get_client().await.is_err());
-        }
+        assert!(
+            start_result.is_err(),
+            "start() should fail for non-MCP process"
+        );
+        assert!(!endpoint.is_started());
     }
 
     #[tokio::test]
@@ -159,8 +158,12 @@ mod tests {
         };
 
         let mut endpoint = LocalEndpoint::new("test-exit".to_string(), config);
-        let _ = endpoint.start().await;
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        let result = endpoint.start().await;
+        assert!(
+            result.is_err(),
+            "start() should fail when process exits immediately"
+        );
+        assert!(!endpoint.is_started());
     }
 }
