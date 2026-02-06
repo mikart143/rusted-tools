@@ -3,17 +3,13 @@ pub(crate) mod local;
 pub(crate) mod manager;
 pub(crate) mod registry;
 pub(crate) mod remote;
-pub(crate) mod traits;
 
 pub(crate) use local::LocalEndpoint;
 pub use manager::EndpointManager;
 pub(crate) use remote::RemoteEndpoint;
-pub(crate) use traits::EndpointInstance;
 
-use crate::endpoint::registry::EndpointType;
 use crate::error::Result;
 use crate::mcp::McpClient;
-use async_trait::async_trait;
 use axum::Router;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -26,58 +22,29 @@ pub(crate) enum EndpointKind {
     Remote(RemoteEndpoint),
 }
 
-#[async_trait]
-impl EndpointInstance for EndpointKind {
-    fn name(&self) -> &str {
-        match self {
-            EndpointKind::Local(s) => s.name(),
-            EndpointKind::Remote(s) => s.name(),
-        }
-    }
-
-    fn path(&self) -> &str {
-        match self {
-            EndpointKind::Local(s) => s.path(),
-            EndpointKind::Remote(s) => s.path(),
-        }
-    }
-
-    fn endpoint_type(&self) -> EndpointType {
-        match self {
-            EndpointKind::Local(s) => s.endpoint_type(),
-            EndpointKind::Remote(s) => s.endpoint_type(),
-        }
-    }
-
-    async fn start(&mut self) -> Result<()> {
+impl EndpointKind {
+    pub(crate) async fn start(&mut self) -> Result<()> {
         match self {
             EndpointKind::Local(s) => s.start().await,
             EndpointKind::Remote(s) => s.start().await,
         }
     }
 
-    async fn stop(&mut self) -> Result<()> {
+    pub(crate) async fn stop(&mut self) -> Result<()> {
         match self {
             EndpointKind::Local(s) => s.stop().await,
             EndpointKind::Remote(s) => s.stop().await,
         }
     }
 
-    async fn get_or_create_client(&self) -> Result<Arc<McpClient>> {
+    pub(crate) async fn get_or_create_client(&self) -> Result<Arc<McpClient>> {
         match self {
             EndpointKind::Local(s) => s.get_or_create_client().await,
             EndpointKind::Remote(s) => s.get_or_create_client().await,
         }
     }
 
-    fn is_started(&self) -> bool {
-        match self {
-            EndpointKind::Local(s) => s.is_started(),
-            EndpointKind::Remote(s) => s.is_started(),
-        }
-    }
-
-    async fn attach_http_route<S>(
+    pub(crate) async fn attach_http_route<S>(
         &self,
         router: Router<S>,
         path: &str,

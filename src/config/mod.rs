@@ -28,7 +28,7 @@ fn validate_config(config: &AppConfig) -> Result<()> {
     // Validate that endpoint paths are unique
     let mut paths = std::collections::HashSet::new();
     for endpoint in &config.endpoints {
-        let path = endpoint.get_path();
+        let path = endpoint.name.clone();
         if !paths.insert(path.clone()) {
             anyhow::bail!("Duplicate endpoint path '{}' found in configuration", path);
         }
@@ -47,7 +47,7 @@ fn validate_config(config: &AppConfig) -> Result<()> {
 
     // Validate endpoint paths don't contain special characters
     for endpoint in &config.endpoints {
-        let path = endpoint.get_path();
+        let path = endpoint.name.clone();
         if path.contains('/') || path.contains('\\') || path.contains('.') {
             anyhow::bail!(
                 "Endpoint path '{}' contains invalid characters (/, \\, or .)",
@@ -147,7 +147,7 @@ args = ["hello"]
             logging: LoggingConfig::default(),
             endpoints: vec![
                 EndpointConfig {
-                    name: "server1".to_string(),
+                    name: "server".to_string(),
                     endpoint_type: EndpointKindConfig::Local {
                         command: "echo".to_string(),
                         args: vec![],
@@ -156,10 +156,9 @@ args = ["hello"]
                         restart_on_failure: false,
                     },
                     tools: None,
-                    path: Some("test".to_string()),
                 },
                 EndpointConfig {
-                    name: "server2".to_string(),
+                    name: "server".to_string(),
                     endpoint_type: EndpointKindConfig::Local {
                         command: "echo".to_string(),
                         args: vec![],
@@ -168,7 +167,6 @@ args = ["hello"]
                         restart_on_failure: false,
                     },
                     tools: None,
-                    path: Some("test".to_string()),
                 },
             ],
         };
@@ -182,7 +180,7 @@ args = ["hello"]
             http: HttpConfig::default(),
             logging: LoggingConfig::default(),
             endpoints: vec![EndpointConfig {
-                name: "server1".to_string(),
+                name: "server/path".to_string(),
                 endpoint_type: EndpointKindConfig::Local {
                     command: "echo".to_string(),
                     args: vec![],
@@ -191,7 +189,6 @@ args = ["hello"]
                     restart_on_failure: false,
                 },
                 tools: None,
-                path: Some("test/path".to_string()),
             }],
         };
 

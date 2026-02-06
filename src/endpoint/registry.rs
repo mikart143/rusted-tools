@@ -37,7 +37,7 @@ pub(crate) struct EndpointInfo {
     pub(crate) status: EndpointStatus,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum EndpointType {
     Local,

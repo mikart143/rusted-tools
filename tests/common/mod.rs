@@ -31,7 +31,6 @@ pub fn create_offline_config() -> AppConfig {
                     restart_on_failure: false,
                 },
                 tools: None,
-                path: Some("local-stub".to_string()),
             },
             EndpointConfig {
                 name: "remote-stub".to_string(),
@@ -39,7 +38,6 @@ pub fn create_offline_config() -> AppConfig {
                     url: "http://127.0.0.1:19876".to_string(),
                 },
                 tools: None,
-                path: Some("remote-stub".to_string()),
             },
         ],
     }
@@ -63,7 +61,6 @@ pub fn create_live_remote_config() -> AppConfig {
                 url: "https://learn.microsoft.com/api/mcp".to_string(),
             },
             tools: None,
-            path: Some("microsoft-learn".to_string()),
         }],
     }
 }
@@ -91,7 +88,6 @@ pub fn create_live_local_config() -> AppConfig {
                 restart_on_failure: false,
             },
             tools: None,
-            path: Some("time".to_string()),
         }],
     }
 }
@@ -111,7 +107,6 @@ pub fn create_live_full_config() -> AppConfig {
                     url: "https://learn.microsoft.com/api/mcp".to_string(),
                 },
                 tools: None,
-                path: Some("microsoft-learn".to_string()),
             },
             EndpointConfig {
                 name: "time".to_string(),
@@ -128,7 +123,6 @@ pub fn create_live_full_config() -> AppConfig {
                     restart_on_failure: false,
                 },
                 tools: None,
-                path: Some("time".to_string()),
             },
         ],
     }

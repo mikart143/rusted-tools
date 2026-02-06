@@ -30,7 +30,7 @@ impl PathRouter {
     /// Initialize routes from configuration
     pub fn init_from_config(&self, configs: &[EndpointConfig]) -> Result<()> {
         for config in configs {
-            let path = config.get_path();
+            let path = config.name.clone();
             let route = EndpointRoute {
                 endpoint_name: config.name.clone(),
                 tool_filter: config.tools.clone(),
@@ -98,7 +98,6 @@ mod tests {
                 include: Some(vec!["tool1".to_string()]),
                 exclude: None,
             }),
-            path: Some("test-path".to_string()),
         };
 
         manager
@@ -109,7 +108,7 @@ mod tests {
         let router = PathRouter::new(manager);
         router.init_from_config(&[config]).unwrap();
 
-        let (endpoint_name, filter) = router.get_route("test-path").unwrap();
+        let (endpoint_name, filter) = router.get_route("test-server").unwrap();
         assert_eq!(endpoint_name, "test-server");
         assert!(filter.is_some());
     }
@@ -125,7 +124,6 @@ mod tests {
                 url: "http://localhost:8080".to_string(),
             },
             tools: None,
-            path: Some("remote".to_string()),
         };
 
         manager
@@ -137,7 +135,7 @@ mod tests {
         router.init_from_config(&[config]).unwrap();
 
         // get_client creates a client, which will fail since endpoint is unreachable
-        let result = router.get_client("remote").await;
+        let result = router.get_client("test-server").await;
         assert!(
             result.is_err(),
             "Should fail when remote endpoint is unreachable"

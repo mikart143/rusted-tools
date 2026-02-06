@@ -174,7 +174,6 @@ mod tests {
                     restart_on_failure: false,
                 },
                 tools: None,
-                path: Some("test-local".to_string()),
             },
             EndpointConfig {
                 name: "test-remote".to_string(),
@@ -182,7 +181,6 @@ mod tests {
                     url: "http://localhost:8080".to_string(),
                 },
                 tools: None,
-                path: Some("test-remote".to_string()),
             },
         ];
 

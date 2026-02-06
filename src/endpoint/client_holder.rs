@@ -37,13 +37,6 @@ impl ClientHolder {
         *lock = None;
     }
 
-    pub(crate) fn is_set(&self) -> bool {
-        self.client
-            .try_read()
-            .map(|lock| lock.is_some())
-            .unwrap_or(false)
-    }
-
     pub(crate) async fn ensure_not_running(&self, name: &str) -> Result<()> {
         if self.client.read().await.is_some() {
             return Err(ProxyError::ServerAlreadyRunning(name.to_string()));

@@ -1,10 +1,7 @@
 use crate::config::LocalEndpointSettings;
 use crate::endpoint::client_holder::ClientHolder;
-use crate::endpoint::registry::EndpointType;
-use crate::endpoint::traits::EndpointInstance;
 use crate::error::Result;
 use crate::mcp::McpClient;
-use async_trait::async_trait;
 use axum::Router;
 use rmcp::transport::TokioChildProcess;
 use std::sync::Arc;
@@ -34,21 +31,8 @@ impl LocalEndpoint {
     }
 }
 
-#[async_trait]
-impl EndpointInstance for LocalEndpoint {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn path(&self) -> &str {
-        &self.config.path
-    }
-
-    fn endpoint_type(&self) -> EndpointType {
-        EndpointType::Local
-    }
-
-    async fn start(&mut self) -> Result<()> {
+impl LocalEndpoint {
+    pub(crate) async fn start(&mut self) -> Result<()> {
         self.client_holder.ensure_not_running(&self.name).await?;
 
         info!("Starting local MCP endpoint: {}", self.name);
@@ -75,7 +59,7 @@ impl EndpointInstance for LocalEndpoint {
         Ok(())
     }
 
-    async fn stop(&mut self) -> Result<()> {
+    pub(crate) async fn stop(&mut self) -> Result<()> {
         self.client_holder.ensure_running(&self.name).await?;
 
         info!("Stopping local MCP endpoint: {}", self.name);
@@ -86,15 +70,11 @@ impl EndpointInstance for LocalEndpoint {
         Ok(())
     }
 
-    async fn get_or_create_client(&self) -> Result<Arc<McpClient>> {
+    pub(crate) async fn get_or_create_client(&self) -> Result<Arc<McpClient>> {
         self.get_client().await
     }
 
-    fn is_started(&self) -> bool {
-        self.client_holder.is_set()
-    }
-
-    async fn attach_http_route<S>(
+    pub(crate) async fn attach_http_route<S>(
         &self,
         router: Router<S>,
         path: &str,
@@ -133,8 +113,6 @@ mod tests {
             command: "echo".to_string(),
             args: vec!["not-an-mcp-server".to_string()],
             env: HashMap::new(),
-            path: "test".to_string(),
-            restart_on_failure: false,
         };
 
         let mut endpoint = LocalEndpoint::new("test-echo".to_string(), config);
@@ -144,7 +122,6 @@ mod tests {
             start_result.is_err(),
             "start() should fail for non-MCP process"
         );
-        assert!(!endpoint.is_started());
     }
 
     #[tokio::test]
@@ -153,8 +130,6 @@ mod tests {
             command: "true".to_string(),
             args: vec![],
             env: HashMap::new(),
-            path: "test".to_string(),
-            restart_on_failure: false,
         };
 
         let mut endpoint = LocalEndpoint::new("test-exit".to_string(), config);
@@ -164,6 +139,5 @@ mod tests {
             result.is_err(),
             "start() should fail when process exits immediately"
         );
-        assert!(!endpoint.is_started());
     }
 }

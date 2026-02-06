@@ -51,15 +51,9 @@ pub struct EndpointConfig {
     pub endpoint_type: EndpointKindConfig,
     #[serde(default)]
     pub tools: Option<ToolFilter>,
-    pub path: Option<String>, // URL path, defaults to name if not set
 }
 
 impl EndpointConfig {
-    /// Get the URL path for this endpoint (defaults to name if not specified)
-    pub(crate) fn get_path(&self) -> String {
-        self.path.clone().unwrap_or_else(|| self.name.clone())
-    }
-
     /// Extract local endpoint settings from this config
     /// Panics if this is not a local endpoint config (should check type first)
     pub(crate) fn to_local_settings(&self) -> LocalEndpointSettings {
@@ -68,14 +62,11 @@ impl EndpointConfig {
                 command,
                 args,
                 env,
-                restart_on_failure,
                 ..
             } => LocalEndpointSettings {
                 command: command.clone(),
                 args: args.clone(),
                 env: env.clone(),
-                path: self.get_path(),
-                restart_on_failure: *restart_on_failure,
             },
             _ => panic!("Expected local endpoint configuration"),
         }
@@ -126,8 +117,6 @@ pub(crate) struct LocalEndpointSettings {
     pub command: String,
     pub args: Vec<String>,
     pub env: HashMap<String, String>,
-    pub path: String,
-    pub restart_on_failure: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

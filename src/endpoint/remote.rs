@@ -1,10 +1,7 @@
 use crate::config::EndpointConfig;
 use crate::endpoint::client_holder::ClientHolder;
-use crate::endpoint::registry::EndpointType;
-use crate::endpoint::traits::EndpointInstance;
 use crate::error::{ProxyError, Result};
 use crate::mcp::McpClient;
-use async_trait::async_trait;
 use axum::Router;
 use axum_reverse_proxy::ReverseProxy;
 use std::sync::Arc;
@@ -15,16 +12,14 @@ use tracing::{info, warn};
 #[derive(Clone)]
 pub(crate) struct RemoteEndpoint {
     pub(crate) name: String,
-    pub(crate) path: String,
     pub(crate) url: String,
     client_holder: ClientHolder,
 }
 
 impl RemoteEndpoint {
-    pub(crate) fn new(name: String, path: String, url: String) -> Self {
+    pub(crate) fn new(name: String, url: String) -> Self {
         Self {
             name,
-            path,
             url,
             client_holder: ClientHolder::new(),
         }
@@ -33,12 +28,11 @@ impl RemoteEndpoint {
     pub(crate) fn from_config(config: &EndpointConfig) -> Result<Self> {
         match &config.endpoint_type {
             crate::config::EndpointKindConfig::Remote { url } => {
-                let path = config.path.clone().unwrap_or_else(|| config.name.clone());
                 info!(
-                    "Configured remote MCP endpoint: {} at {} (path: {})",
-                    config.name, url, path
+                    "Configured remote MCP endpoint: {} at {}",
+                    config.name, url
                 );
-                Ok(Self::new(config.name.clone(), path, url.clone()))
+                Ok(Self::new(config.name.clone(), url.clone()))
             }
             _ => Err(ProxyError::Config(
                 "Expected remote endpoint configuration".to_string(),
@@ -47,21 +41,8 @@ impl RemoteEndpoint {
     }
 }
 
-#[async_trait]
-impl EndpointInstance for RemoteEndpoint {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn path(&self) -> &str {
-        &self.path
-    }
-
-    fn endpoint_type(&self) -> EndpointType {
-        EndpointType::Remote
-    }
-
-    async fn start(&mut self) -> Result<()> {
+impl RemoteEndpoint {
+    pub(crate) async fn start(&mut self) -> Result<()> {
         self.client_holder.ensure_not_running(&self.name).await?;
 
         info!(
@@ -94,7 +75,7 @@ impl EndpointInstance for RemoteEndpoint {
         Ok(())
     }
 
-    async fn stop(&mut self) -> Result<()> {
+    pub(crate) async fn stop(&mut self) -> Result<()> {
         self.client_holder.ensure_running(&self.name).await?;
 
         info!("Stopping remote MCP endpoint: {}", self.name);
@@ -105,7 +86,7 @@ impl EndpointInstance for RemoteEndpoint {
         Ok(())
     }
 
-    async fn get_or_create_client(&self) -> Result<Arc<McpClient>> {
+    pub(crate) async fn get_or_create_client(&self) -> Result<Arc<McpClient>> {
         if let Ok(client) = self.client_holder.get(&self.name).await {
             return Ok(client);
         }
@@ -120,11 +101,7 @@ impl EndpointInstance for RemoteEndpoint {
         Ok(Arc::new(client))
     }
 
-    fn is_started(&self) -> bool {
-        self.client_holder.is_set()
-    }
-
-    async fn attach_http_route<S>(
+    pub(crate) async fn attach_http_route<S>(
         &self,
         router: Router<S>,
         path: &str,
@@ -157,12 +134,10 @@ mod tests {
                 url: "https://example.com".to_string(),
             },
             tools: None,
-            path: Some("remote".to_string()),
         };
 
         let endpoint = RemoteEndpoint::from_config(&config).unwrap();
         assert_eq!(endpoint.name, "test-remote");
-        assert_eq!(endpoint.path, "remote");
         assert_eq!(endpoint.url, "https://example.com");
     }
 
@@ -178,21 +153,11 @@ mod tests {
                 restart_on_failure: false,
             },
             tools: None,
-            path: Some("local".to_string()),
         };
 
         let result = RemoteEndpoint::from_config(&config);
         assert!(result.is_err());
     }
 
-    #[tokio::test]
-    async fn test_is_started() {
-        let endpoint = RemoteEndpoint::new(
-            "test".to_string(),
-            "test-path".to_string(),
-            "http://localhost:8080".to_string(),
-        );
 
-        assert!(!endpoint.is_started());
-    }
 }

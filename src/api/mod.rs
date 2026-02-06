@@ -3,7 +3,6 @@ pub(crate) mod mcp_sse_service;
 pub mod routes;
 
 use crate::config::AppConfig;
-use crate::endpoint::traits::EndpointInstance;
 use crate::endpoint::EndpointManager;
 use crate::routing::PathRouter;
 use anyhow::Result;

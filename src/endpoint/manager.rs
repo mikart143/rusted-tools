@@ -2,7 +2,6 @@ use crate::config::{EndpointConfig, EndpointKindConfig};
 use crate::endpoint::local::LocalEndpoint;
 use crate::endpoint::registry::{EndpointInfo, EndpointRegistry, EndpointStatus, EndpointType};
 use crate::endpoint::remote::RemoteEndpoint;
-use crate::endpoint::traits::EndpointInstance;
 use crate::endpoint::EndpointKind;
 use crate::error::{ProxyError, Result};
 use crate::mcp::McpClient;
@@ -51,10 +50,9 @@ impl EndpointManager {
 
     async fn init_local_endpoint(&self, config: EndpointConfig, auto_start: bool) -> Result<()> {
         let name = config.name.clone();
-        let path = config.get_path();
 
         self.registry
-            .register(name.clone(), path.clone(), EndpointType::Local)?;
+            .register(name.clone(), name.clone(), EndpointType::Local)?;
 
         let local_config = config.to_local_settings();
         let endpoint = LocalEndpoint::new(name.clone(), local_config);
@@ -74,17 +72,16 @@ impl EndpointManager {
 
     async fn init_remote_endpoint(&self, config: EndpointConfig) -> Result<()> {
         let name = config.name.clone();
-        let path = config.get_path();
 
         self.registry
-            .register(name.clone(), path.clone(), EndpointType::Remote)?;
+            .register(name.clone(), name.clone(), EndpointType::Remote)?;
 
         let remote_endpoint = RemoteEndpoint::from_config(&config)?;
         let endpoint_kind = EndpointKind::Remote(remote_endpoint);
         self.endpoints
             .insert(name.clone(), Arc::new(RwLock::new(endpoint_kind)));
 
-        info!("Registered remote endpoint: {} at path /{}", name, path);
+        info!("Registered remote endpoint: {} at path /{}", name, name);
 
         Ok(())
     }
@@ -190,8 +187,15 @@ impl EndpointManager {
 
         for entry in self.endpoints.iter() {
             let name = entry.key();
-            if let Err(e) = self.stop_endpoint(name).await {
-                warn!("Error stopping endpoint {} during shutdown: {}", name, e);
+            
+            // Only stop local endpoints; remote endpoints are external services
+            // that don't need lifecycle management
+            if let Ok(info) = self.registry.get(name) {
+                if info.endpoint_type == EndpointType::Local {
+                    if let Err(e) = self.stop_endpoint(name).await {
+                        warn!("Error stopping endpoint {} during shutdown: {}", name, e);
+                    }
+                }
             }
         }
 
@@ -225,7 +229,6 @@ mod tests {
                 restart_on_failure: false,
             },
             tools: None,
-            path: Some("test".to_string()),
         };
 
         manager.init_from_config(vec![config]).await.unwrap();
@@ -248,7 +251,6 @@ mod tests {
                 restart_on_failure: false,
             },
             tools: None,
-            path: Some("test".to_string()),
         };
 
         manager.init_from_config(vec![config]).await.unwrap();
@@ -270,7 +272,6 @@ mod tests {
                 url: "https://example.com".to_string(),
             },
             tools: None,
-            path: Some("remote".to_string()),
         };
 
         manager.init_from_config(vec![config]).await.unwrap();
