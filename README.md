@@ -105,7 +105,6 @@ name = "memory"
 type = "local"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-memory"]
-path = "memory"
 auto_start = true
 restart_on_failure = true
 
@@ -115,7 +114,6 @@ name = "fetch"
 type = "local"
 command = "docker"
 args = ["run", "--rm", "-i", "mcp/fetch"]
-path = "fetch"
 auto_start = true
 restart_on_failure = false
 
@@ -124,7 +122,6 @@ restart_on_failure = false
 name = "microsoft-learn"
 type = "remote"
 url = "https://learn.microsoft.com/api/mcp"
-path = "microsoft-learn"
 ```
 
 ### 2. Start the Proxy
@@ -241,28 +238,26 @@ format = "pretty"     # Format: pretty or json
 
 ```toml
 [[mcp_servers]]
-name = "server-name"          # Unique identifier
+name = "server-name"          # Unique identifier (becomes URL path: /mcp/{name})
 type = "local"                # Server type: local or remote
 command = "npx"               # Command to execute
 args = ["-y", "package"]      # Command arguments
-path = "api-path"             # URL path for this server (/mcp/{path})
 auto_start = true             # Start on proxy startup
 restart_on_failure = true     # Auto-restart if crashed
 
 # Optional: Tool filtering (local servers only)
 [mcp_servers.tools]
-mode = "allowlist"            # or "blocklist"
-patterns = ["create_*", "read_*"]
+include = ["create_*", "read_*"]  # Allowlist patterns (optional)
+exclude = ["dangerous_*"]         # Blocklist patterns (optional)
 ```
 
 ### Remote MCP Server Configuration
 
 ```toml
 [[mcp_servers]]
-name = "remote-server"                      # Unique identifier
+name = "remote-server"                      # Unique identifier (becomes URL path: /mcp/{name})
 type = "remote"                             # Must be: remote
 url = "https://learn.microsoft.com/api/mcp" # Base URL of remote server
-path = "microsoft-learn"                    # URL path for proxy (/mcp/{path})
 ```
 
 ### Full Configuration Example
@@ -513,7 +508,7 @@ graph TD
 name = "microsoft-learn"
 type = "remote"
 url = "https://learn.microsoft.com/api/mcp"  # Base URL of remote server
-path = "microsoft-learn"                      # Local proxy path
+# The endpoint name becomes the URL path: /mcp/microsoft-learn
 ```
 
 ### How It Works
@@ -546,7 +541,6 @@ path = "microsoft-learn"                      # Local proxy path
 name = "microsoft-learn"
 type = "remote"
 url = "https://learn.microsoft.com/api/mcp"
-path = "microsoft-learn"
 ```
 
 **Initialize Request:**
@@ -716,12 +710,12 @@ src/
 │   ├── path_router.rs   # PathRouter: path-to-endpoint routing (DashMap-based)
 │   └── tool_filter.rs   # Tool include/exclude filtering
 └── endpoint/            # Endpoint lifecycle
-    ├── mod.rs           # EndpointKind enum dispatch
-    ├── traits.rs        # EndpointInstance async trait definition
+    ├── mod.rs           # EndpointKind enum dispatch (polymorphic handler)
     ├── manager.rs       # EndpointManager lifecycle orchestration (DashMap)
     ├── registry.rs      # EndpointRegistry, EndpointInfo, EndpointStatus
     ├── local.rs         # LocalEndpoint (subprocess via TokioChildProcess)
-    └── remote.rs        # RemoteEndpoint (HTTP reverse proxy)
+    ├── remote.rs        # RemoteEndpoint (HTTP reverse proxy)
+    └── client_holder.rs # ClientHolder (shared client lifecycle helper)
 
 tests/
 ├── integration_test.rs  # Full API endpoint integration tests
@@ -760,16 +754,30 @@ examples/
 ### Async Programming
 
 - **tokio runtime** for all async operations
-- **#[async_trait]** for trait methods
 - **#[tokio::test]** for async tests
 - Task spawning with `tokio::spawn` for long-running operations
+- Async methods on concrete types (no async_trait overhead)
 
 ### Serialization
 
 - **serde derives** on all config and API types
 - **TOML** for configuration files
 - **JSON** for HTTP request/response bodies
-- **#[serde(tag = "type", rename_all = "lowercase")]** for tagged enums
+- **#[serde(tag = "type", rename_all = "lowercase")]** for tagged enums (e.g., `EndpointKindConfig`)
+
+### Polymorphism Pattern
+
+- **EndpointKind enum** for unified handling of local and remote endpoints
+- **Concrete method dispatch** via `match` blocks instead of trait objects
+- **No async_trait overhead** - direct method calls on enum variants
+- Example dispatch pattern:
+  ```rust
+  match endpoint {
+      EndpointKind::Local(e) => e.start().await,
+      EndpointKind::Remote(e) => e.start().await,
+  }
+  ```
+- **Benefits:** Simplicity, performance, no vtable overhead, easier debugging
 
 ### Logging
 
