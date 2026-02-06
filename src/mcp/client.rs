@@ -11,54 +11,52 @@ use tracing::{debug, error, info};
 
 /// A wrapper around rmcp RunningService for the proxy
 #[derive(Clone)]
-pub struct McpClient {
+pub(crate) struct McpClient {
     server_name: String,
     service: Arc<RwLock<Option<RunningService<RoleClient, ()>>>>,
 }
 
 impl McpClient {
-    pub fn new(server_name: String) -> Self {
+    pub(crate) fn new(server_name: String) -> Self {
         Self {
             server_name,
             service: Arc::new(RwLock::new(None)),
         }
     }
 
+    async fn store_service(&self, service: RunningService<RoleClient, ()>) {
+        let mut lock = self.service.write().await;
+        *lock = Some(service);
+    }
+
     /// Initialize the MCP client with TokioChildProcess transport
-    pub async fn init_with_transport(&self, transport: TokioChildProcess) -> Result<()> {
+    pub(crate) async fn init_with_transport(&self, transport: TokioChildProcess) -> Result<()> {
         info!("Initializing MCP client for server: {}", self.server_name);
 
-        // Serve the client with the transport (client service is just unit type)
         let service = ().serve(transport).await.map_err(|e| {
             ProxyError::McpProtocol(format!("Failed to initialize MCP client: {:?}", e))
         })?;
 
-        // Store the service
-        let mut service_lock = self.service.write().await;
-        *service_lock = Some(service);
+        self.store_service(service).await;
 
         debug!("MCP client initialized for server: {}", self.server_name);
         Ok(())
     }
 
     /// Initialize the MCP client with HTTP transport for remote servers
-    pub async fn init_with_http(&self, url: &str) -> Result<()> {
+    pub(crate) async fn init_with_http(&self, url: &str) -> Result<()> {
         info!(
             "Initializing MCP HTTP client for server: {} at {}",
             self.server_name, url
         );
 
-        // Create HTTP transport
         let transport = StreamableHttpClientTransport::from_uri(url);
 
-        // Serve the client with the transport
         let service = ().serve(transport).await.map_err(|e| {
             ProxyError::McpProtocol(format!("Failed to initialize MCP HTTP client: {:?}", e))
         })?;
 
-        // Store the service
-        let mut service_lock = self.service.write().await;
-        *service_lock = Some(service);
+        self.store_service(service).await;
 
         debug!(
             "MCP HTTP client initialized for server: {}",
@@ -68,7 +66,7 @@ impl McpClient {
     }
 
     /// List available tools from the MCP server
-    pub async fn list_tools(&self) -> Result<Vec<ToolDefinition>> {
+    pub(crate) async fn list_tools(&self) -> Result<Vec<ToolDefinition>> {
         let service_lock = self.service.read().await;
         let service = service_lock
             .as_ref()
@@ -111,7 +109,7 @@ impl McpClient {
     }
 
     /// Call a tool on the MCP server
-    pub async fn call_tool(&self, request: ToolCallRequest) -> Result<ToolCallResponse> {
+    pub(crate) async fn call_tool(&self, request: ToolCallRequest) -> Result<ToolCallResponse> {
         let service_lock = self.service.read().await;
         let service = service_lock
             .as_ref()
@@ -180,7 +178,7 @@ impl McpClient {
     }
 
     /// Get server name
-    pub fn server_name(&self) -> &str {
+    pub(crate) fn server_name(&self) -> &str {
         &self.server_name
     }
 }

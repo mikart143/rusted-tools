@@ -7,7 +7,7 @@ use std::sync::Arc;
 /// Status of an MCP endpoint instance
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
-pub enum EndpointStatus {
+pub(crate) enum EndpointStatus {
     Starting,
     Running,
     Stopping,
@@ -30,16 +30,16 @@ impl fmt::Display for EndpointStatus {
 
 /// Information about a registered endpoint
 #[derive(Debug, Clone)]
-pub struct EndpointInfo {
-    pub name: String,
-    pub path: String,
-    pub endpoint_type: EndpointType,
-    pub status: EndpointStatus,
+pub(crate) struct EndpointInfo {
+    pub(crate) name: String,
+    pub(crate) path: String,
+    pub(crate) endpoint_type: EndpointType,
+    pub(crate) status: EndpointStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum EndpointType {
+pub(crate) enum EndpointType {
     Local,
     Remote,
 }
@@ -56,19 +56,24 @@ impl fmt::Display for EndpointType {
 
 /// Registry for tracking active MCP endpoint instances
 #[derive(Clone)]
-pub struct EndpointRegistry {
+pub(crate) struct EndpointRegistry {
     endpoints: Arc<DashMap<String, EndpointInfo>>,
 }
 
 impl EndpointRegistry {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             endpoints: Arc::new(DashMap::new()),
         }
     }
 
     /// Register a new endpoint
-    pub fn register(&self, name: String, path: String, endpoint_type: EndpointType) -> Result<()> {
+    pub(crate) fn register(
+        &self,
+        name: String,
+        path: String,
+        endpoint_type: EndpointType,
+    ) -> Result<()> {
         if self.endpoints.contains_key(&name) {
             return Err(ProxyError::ServerAlreadyExists(name));
         }
@@ -85,7 +90,7 @@ impl EndpointRegistry {
     }
 
     /// Get endpoint info by name
-    pub fn get(&self, name: &str) -> Result<EndpointInfo> {
+    pub(crate) fn get(&self, name: &str) -> Result<EndpointInfo> {
         self.endpoints
             .get(name)
             .map(|entry| entry.value().clone())
@@ -93,7 +98,7 @@ impl EndpointRegistry {
     }
 
     /// Update endpoint status
-    pub fn set_status(&self, name: &str, status: EndpointStatus) -> Result<()> {
+    pub(crate) fn set_status(&self, name: &str, status: EndpointStatus) -> Result<()> {
         let mut entry = self
             .endpoints
             .get_mut(name)
@@ -103,7 +108,7 @@ impl EndpointRegistry {
     }
 
     /// List all registered endpoints
-    pub fn list(&self) -> Vec<EndpointInfo> {
+    pub(crate) fn list(&self) -> Vec<EndpointInfo> {
         self.endpoints
             .iter()
             .map(|entry| entry.value().clone())

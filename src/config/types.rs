@@ -56,13 +56,13 @@ pub struct EndpointConfig {
 
 impl EndpointConfig {
     /// Get the URL path for this endpoint (defaults to name if not specified)
-    pub fn get_path(&self) -> String {
+    pub(crate) fn get_path(&self) -> String {
         self.path.clone().unwrap_or_else(|| self.name.clone())
     }
 
     /// Extract local endpoint settings from this config
     /// Panics if this is not a local endpoint config (should check type first)
-    pub fn to_local_settings(&self) -> LocalEndpointSettings {
+    pub(crate) fn to_local_settings(&self) -> LocalEndpointSettings {
         match &self.endpoint_type {
             EndpointKindConfig::Local {
                 command,
@@ -122,7 +122,7 @@ fn default_auto_start() -> bool {
 
 /// Local endpoint settings extracted from config
 #[derive(Debug, Clone)]
-pub struct LocalEndpointSettings {
+pub(crate) struct LocalEndpointSettings {
     pub command: String,
     pub args: Vec<String>,
     pub env: HashMap<String, String>,

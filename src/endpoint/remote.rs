@@ -1,4 +1,5 @@
 use crate::config::EndpointConfig;
+use crate::endpoint::client_holder::ClientHolder;
 use crate::endpoint::registry::EndpointType;
 use crate::endpoint::traits::EndpointInstance;
 use crate::error::{ProxyError, Result};
@@ -7,31 +8,29 @@ use async_trait::async_trait;
 use axum::Router;
 use axum_reverse_proxy::ReverseProxy;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 /// Represents a remote MCP endpoint accessed via HTTP/SSE
 #[derive(Clone)]
-pub struct RemoteEndpoint {
-    pub name: String,
-    pub path: String,
-    pub url: String,
-    mcp_client: Arc<RwLock<Option<Arc<McpClient>>>>,
+pub(crate) struct RemoteEndpoint {
+    pub(crate) name: String,
+    pub(crate) path: String,
+    pub(crate) url: String,
+    client_holder: ClientHolder,
 }
 
 impl RemoteEndpoint {
-    pub fn new(name: String, path: String, url: String) -> Self {
+    pub(crate) fn new(name: String, path: String, url: String) -> Self {
         Self {
             name,
             path,
             url,
-            mcp_client: Arc::new(RwLock::new(None)),
+            client_holder: ClientHolder::new(),
         }
     }
 
-    /// Create from configuration
-    pub fn from_config(config: &EndpointConfig) -> Result<Self> {
+    pub(crate) fn from_config(config: &EndpointConfig) -> Result<Self> {
         match &config.endpoint_type {
             crate::config::EndpointKindConfig::Remote { url } => {
                 let path = config.path.clone().unwrap_or_else(|| config.name.clone());
@@ -63,9 +62,7 @@ impl EndpointInstance for RemoteEndpoint {
     }
 
     async fn start(&mut self) -> Result<()> {
-        if self.mcp_client.read().await.is_some() {
-            return Err(ProxyError::ServerAlreadyRunning(self.name.clone()));
-        }
+        self.client_holder.ensure_not_running(&self.name).await?;
 
         info!(
             "Starting remote MCP endpoint: {} at {}",
@@ -91,33 +88,27 @@ impl EndpointInstance for RemoteEndpoint {
             }
         }
 
-        let mut client_lock = self.mcp_client.write().await;
-        *client_lock = Some(Arc::new(client));
+        self.client_holder.set(client).await;
 
         info!("Successfully started remote MCP endpoint: {}", self.name);
         Ok(())
     }
 
     async fn stop(&mut self) -> Result<()> {
-        if self.mcp_client.read().await.is_none() {
-            return Err(ProxyError::ServerNotRunning(self.name.clone()));
-        }
+        self.client_holder.ensure_running(&self.name).await?;
 
         info!("Stopping remote MCP endpoint: {}", self.name);
 
-        let mut client_lock = self.mcp_client.write().await;
-        *client_lock = None;
+        self.client_holder.clear().await;
 
         info!("Successfully stopped remote MCP endpoint: {}", self.name);
         Ok(())
     }
 
     async fn get_or_create_client(&self) -> Result<Arc<McpClient>> {
-        let client_lock = self.mcp_client.read().await;
-        if let Some(client) = client_lock.as_ref() {
-            return Ok(client.clone());
+        if let Ok(client) = self.client_holder.get(&self.name).await {
+            return Ok(client);
         }
-        drop(client_lock);
 
         info!(
             "Creating new HTTP client for remote endpoint: {}",
@@ -130,10 +121,7 @@ impl EndpointInstance for RemoteEndpoint {
     }
 
     fn is_started(&self) -> bool {
-        self.mcp_client
-            .try_read()
-            .map(|lock| lock.is_some())
-            .unwrap_or(false)
+        self.client_holder.is_set()
     }
 
     async fn attach_http_route<S>(

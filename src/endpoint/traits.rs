@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 /// Trait for unified handling of local and remote MCP endpoint instances.
 /// Provides polymorphic interface for endpoint lifecycle management and client access.
 #[async_trait]
-pub trait EndpointInstance: Send + Sync {
+pub(crate) trait EndpointInstance: Send + Sync {
     /// Get the endpoint name
     fn name(&self) -> &str;
 

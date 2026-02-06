@@ -1,7 +1,7 @@
-pub mod bridge;
-pub mod client;
-pub mod types;
+pub(crate) mod bridge;
+pub(crate) mod client;
+pub(crate) mod types;
 
-pub use bridge::StdioBridge;
-pub use client::McpClient;
-pub use types::{ToolCallRequest, ToolDefinition};
+pub(crate) use bridge::StdioBridge;
+pub(crate) use client::McpClient;
+pub(crate) use types::{ToolCallRequest, ToolDefinition};

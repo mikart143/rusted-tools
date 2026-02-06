@@ -17,13 +17,13 @@ use super::client::McpClient;
 /// This translates HTTP/SSE requests into stdio protocol for local endpoints.
 /// Remote endpoints use direct HTTP reverse proxy instead.
 #[derive(Clone)]
-pub struct StdioBridge {
+pub(crate) struct StdioBridge {
     client: Arc<McpClient>,
     server_name: String,
 }
 
 impl StdioBridge {
-    pub fn new(client: Arc<McpClient>, server_name: String) -> Self {
+    pub(crate) fn new(client: Arc<McpClient>, server_name: String) -> Self {
         Self {
             client,
             server_name,

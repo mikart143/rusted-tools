@@ -1,5 +1,5 @@
 pub mod handlers;
-pub mod mcp_sse_service;
+pub(crate) mod mcp_sse_service;
 pub mod routes;
 
 use crate::config::AppConfig;

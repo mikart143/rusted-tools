@@ -1,16 +1,16 @@
-pub mod local;
-pub mod manager;
-pub mod registry;
-pub mod remote;
-pub mod traits;
+pub(crate) mod client_holder;
+pub(crate) mod local;
+pub(crate) mod manager;
+pub(crate) mod registry;
+pub(crate) mod remote;
+pub(crate) mod traits;
 
-pub use local::LocalEndpoint;
+pub(crate) use local::LocalEndpoint;
 pub use manager::EndpointManager;
-#[allow(unused_imports)]
-pub use registry::{EndpointInfo, EndpointRegistry, EndpointStatus, EndpointType};
-pub use remote::RemoteEndpoint;
-pub use traits::EndpointInstance;
+pub(crate) use remote::RemoteEndpoint;
+pub(crate) use traits::EndpointInstance;
 
+use crate::endpoint::registry::EndpointType;
 use crate::error::Result;
 use crate::mcp::McpClient;
 use async_trait::async_trait;
@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 /// Enum wrapper for polymorphic endpoint handling
 /// This allows us to store different endpoint types in the same collection
 #[derive(Clone)]
-pub enum EndpointKind {
+pub(crate) enum EndpointKind {
     Local(LocalEndpoint),
     Remote(RemoteEndpoint),
 }

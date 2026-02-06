@@ -17,7 +17,7 @@ pub struct ApiState {
     pub router: Arc<PathRouter>,
 }
 
-pub async fn health_check() -> impl IntoResponse {
+pub(crate) async fn health_check() -> impl IntoResponse {
     Json(json!({
         "status": "ok",
         "service": "rusted-tools",
@@ -25,7 +25,7 @@ pub async fn health_check() -> impl IntoResponse {
     }))
 }
 
-pub async fn server_info() -> impl IntoResponse {
+pub(crate) async fn server_info() -> impl IntoResponse {
     Json(json!({
         "name": env!("CARGO_PKG_NAME"),
         "version": env!("CARGO_PKG_VERSION"),
@@ -34,7 +34,7 @@ pub async fn server_info() -> impl IntoResponse {
     }))
 }
 
-pub async fn list_servers(State(state): State<ApiState>) -> impl IntoResponse {
+pub(crate) async fn list_servers(State(state): State<ApiState>) -> impl IntoResponse {
     let endpoints = state.manager.list_endpoints();
     let endpoint_list: Vec<Value> = endpoints
         .into_iter()
@@ -53,7 +53,7 @@ pub async fn list_servers(State(state): State<ApiState>) -> impl IntoResponse {
     }))
 }
 
-pub async fn server_status(
+pub(crate) async fn server_status(
     State(state): State<ApiState>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ProxyError> {
@@ -66,7 +66,7 @@ pub async fn server_status(
     })))
 }
 
-pub async fn start_server(
+pub(crate) async fn start_server(
     State(state): State<ApiState>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ProxyError> {
@@ -80,7 +80,7 @@ pub async fn start_server(
     })))
 }
 
-pub async fn stop_server(
+pub(crate) async fn stop_server(
     State(state): State<ApiState>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ProxyError> {
@@ -94,7 +94,7 @@ pub async fn stop_server(
     })))
 }
 
-pub async fn restart_server(
+pub(crate) async fn restart_server(
     State(state): State<ApiState>,
     Path(name): Path<String>,
 ) -> Result<impl IntoResponse, ProxyError> {
@@ -110,7 +110,7 @@ pub async fn restart_server(
 
 // MCP-specific handlers
 
-pub async fn mcp_list_tools(
+pub(crate) async fn mcp_list_tools(
     State(state): State<ApiState>,
     Path(path): Path<String>,
 ) -> Result<impl IntoResponse, ProxyError> {
@@ -129,7 +129,7 @@ pub async fn mcp_list_tools(
     })))
 }
 
-pub async fn mcp_call_tool(
+pub(crate) async fn mcp_call_tool(
     State(state): State<ApiState>,
     Path(path): Path<String>,
     Json(payload): Json<Value>,

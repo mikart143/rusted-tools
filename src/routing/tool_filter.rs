@@ -5,7 +5,7 @@ impl ToolFilter {
     /// Check if a tool should be allowed based on include/exclude filters
     /// Include list takes precedence - if present, tool must be in it
     /// Exclude list is then checked - if present, tool must not be in it
-    pub fn allows(&self, tool_name: &str) -> bool {
+    pub(crate) fn allows(&self, tool_name: &str) -> bool {
         // If include list exists, tool must be in it
         if let Some(include) = &self.include {
             if !include.iter().any(|t| t == tool_name) {
@@ -25,8 +25,7 @@ impl ToolFilter {
 }
 
 /// Apply tool filters to a list of tools
-/// This is a public API function for library consumers
-pub fn apply_tool_filter(
+pub(crate) fn apply_tool_filter(
     tools: Vec<ToolDefinition>,
     filter: Option<&ToolFilter>,
 ) -> Vec<ToolDefinition> {
@@ -40,8 +39,7 @@ pub fn apply_tool_filter(
 }
 
 /// Check if a specific tool name is allowed by the filter
-/// This is a public API function for library consumers
-pub fn is_tool_allowed(tool_name: &str, filter: Option<&ToolFilter>) -> bool {
+pub(crate) fn is_tool_allowed(tool_name: &str, filter: Option<&ToolFilter>) -> bool {
     match filter {
         None => true, // No filter, all tools allowed
         Some(filter) => filter.allows(tool_name),

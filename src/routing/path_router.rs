@@ -43,7 +43,7 @@ impl PathRouter {
     }
 
     /// Get endpoint name and filter for a path
-    pub fn get_route(&self, path: &str) -> Result<(String, Option<ToolFilter>)> {
+    pub(crate) fn get_route(&self, path: &str) -> Result<(String, Option<ToolFilter>)> {
         self.path_to_endpoint
             .get(path)
             .map(|entry| {
@@ -54,7 +54,10 @@ impl PathRouter {
     }
 
     /// Get MCP client for a specific path (works for both local and remote)
-    pub async fn get_client(&self, path: &str) -> Result<(Arc<McpClient>, Option<ToolFilter>)> {
+    pub(crate) async fn get_client(
+        &self,
+        path: &str,
+    ) -> Result<(Arc<McpClient>, Option<ToolFilter>)> {
         let (endpoint_name, tool_filter) = self.get_route(path)?;
 
         // Get client using polymorphic manager method
@@ -64,7 +67,7 @@ impl PathRouter {
     }
 
     /// List all routes
-    pub fn list_routes(&self) -> Vec<(String, String)> {
+    pub(crate) fn list_routes(&self) -> Vec<(String, String)> {
         self.path_to_endpoint
             .iter()
             .map(|entry| (entry.key().clone(), entry.value().endpoint_name.clone()))

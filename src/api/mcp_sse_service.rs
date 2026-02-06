@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 ///
 /// NOTE: This is only for local endpoints. Remote endpoints use axum-reverse-proxy instead.
 /// See api/mod.rs for the routing logic.
-pub fn create_local_sse_service(
+pub(crate) fn create_local_sse_service(
     client: Arc<crate::mcp::McpClient>,
     server_name: String,
     cancellation_token: CancellationToken,

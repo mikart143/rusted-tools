@@ -3,7 +3,7 @@ use serde_json::Value;
 
 /// Represents an MCP tool definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolDefinition {
+pub(crate) struct ToolDefinition {
     pub name: String,
     pub description: Option<String>,
     pub input_schema: Value,
@@ -11,14 +11,14 @@ pub struct ToolDefinition {
 
 /// Request to call an MCP tool
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallRequest {
+pub(crate) struct ToolCallRequest {
     pub name: String,
     pub arguments: Value,
 }
 
 /// Response from an MCP tool call
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallResponse {
+pub(crate) struct ToolCallResponse {
     pub content: Vec<ToolContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_error: Option<bool>,
@@ -26,7 +26,7 @@ pub struct ToolCallResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum ToolContent {
+pub(crate) enum ToolContent {
     Text {
         text: String,
     },

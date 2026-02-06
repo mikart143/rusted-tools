@@ -90,7 +90,7 @@ impl EndpointManager {
     }
 
     /// Start an MCP endpoint (works for both local and remote)
-    pub async fn start_endpoint(&self, name: &str) -> Result<()> {
+    pub(crate) async fn start_endpoint(&self, name: &str) -> Result<()> {
         let info = self.registry.get(name)?;
 
         if info.status == EndpointStatus::Running {
@@ -121,7 +121,7 @@ impl EndpointManager {
     }
 
     /// Stop an MCP endpoint (works for both local and remote)
-    pub async fn stop_endpoint(&self, name: &str) -> Result<()> {
+    pub(crate) async fn stop_endpoint(&self, name: &str) -> Result<()> {
         let info = self.registry.get(name)?;
 
         if info.status == EndpointStatus::Stopped {
@@ -151,7 +151,7 @@ impl EndpointManager {
     }
 
     /// Restart an MCP endpoint
-    pub async fn restart_endpoint(&self, name: &str) -> Result<()> {
+    pub(crate) async fn restart_endpoint(&self, name: &str) -> Result<()> {
         info!("Restarting endpoint: {}", name);
         self.stop_endpoint(name).await?;
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -160,17 +160,17 @@ impl EndpointManager {
     }
 
     /// Get endpoint info by name
-    pub fn get_endpoint_info(&self, name: &str) -> Result<EndpointInfo> {
+    pub(crate) fn get_endpoint_info(&self, name: &str) -> Result<EndpointInfo> {
         self.registry.get(name)
     }
 
     /// List all registered endpoints
-    pub fn list_endpoints(&self) -> Vec<EndpointInfo> {
+    pub(crate) fn list_endpoints(&self) -> Vec<EndpointInfo> {
         self.registry.list()
     }
 
     /// Get an endpoint instance by name (polymorphic access)
-    pub fn get_endpoint(&self, name: &str) -> Result<Arc<RwLock<EndpointKind>>> {
+    pub(crate) fn get_endpoint(&self, name: &str) -> Result<Arc<RwLock<EndpointKind>>> {
         self.endpoints
             .get(name)
             .map(|entry| entry.value().clone())
@@ -178,14 +178,14 @@ impl EndpointManager {
     }
 
     /// Get an MCP client for any endpoint (works for both local and remote)
-    pub async fn get_client(&self, name: &str) -> Result<Arc<McpClient>> {
+    pub(crate) async fn get_client(&self, name: &str) -> Result<Arc<McpClient>> {
         let endpoint = self.get_endpoint(name)?;
         let endpoint_guard = endpoint.read().await;
         endpoint_guard.get_or_create_client().await
     }
 
     /// Shutdown all endpoints
-    pub async fn shutdown(&self) -> Result<()> {
+    pub(crate) async fn shutdown(&self) -> Result<()> {
         info!("Shutting down all endpoints");
 
         for entry in self.endpoints.iter() {

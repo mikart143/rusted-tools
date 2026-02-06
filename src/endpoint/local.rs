@@ -1,41 +1,36 @@
 use crate::config::LocalEndpointSettings;
+use crate::endpoint::client_holder::ClientHolder;
 use crate::endpoint::registry::EndpointType;
 use crate::endpoint::traits::EndpointInstance;
-use crate::error::{ProxyError, Result};
+use crate::error::Result;
 use crate::mcp::McpClient;
 use async_trait::async_trait;
 use axum::Router;
 use rmcp::transport::TokioChildProcess;
 use std::sync::Arc;
 use tokio::process::Command;
-use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
 /// Represents a local MCP endpoint running as a child process
 #[derive(Clone)]
-pub struct LocalEndpoint {
-    pub name: String,
-    pub config: LocalEndpointSettings,
-    mcp_client: Arc<RwLock<Option<Arc<McpClient>>>>,
+pub(crate) struct LocalEndpoint {
+    pub(crate) name: String,
+    pub(crate) config: LocalEndpointSettings,
+    client_holder: ClientHolder,
 }
 
 impl LocalEndpoint {
-    pub fn new(name: String, config: LocalEndpointSettings) -> Self {
+    pub(crate) fn new(name: String, config: LocalEndpointSettings) -> Self {
         Self {
             name,
             config,
-            mcp_client: Arc::new(RwLock::new(None)),
+            client_holder: ClientHolder::new(),
         }
     }
 
-    /// Get the MCP client for this endpoint
-    pub async fn get_client(&self) -> Result<Arc<McpClient>> {
-        let client_lock = self.mcp_client.read().await;
-        client_lock
-            .as_ref()
-            .cloned()
-            .ok_or_else(|| ProxyError::ServerNotRunning(self.name.clone()))
+    pub(crate) async fn get_client(&self) -> Result<Arc<McpClient>> {
+        self.client_holder.get(&self.name).await
     }
 }
 
@@ -53,11 +48,8 @@ impl EndpointInstance for LocalEndpoint {
         EndpointType::Local
     }
 
-    /// Start the MCP endpoint process
     async fn start(&mut self) -> Result<()> {
-        if self.mcp_client.read().await.is_some() {
-            return Err(ProxyError::ServerAlreadyRunning(self.name.clone()));
-        }
+        self.client_holder.ensure_not_running(&self.name).await?;
 
         info!("Starting local MCP endpoint: {}", self.name);
         debug!(
@@ -71,29 +63,24 @@ impl EndpointInstance for LocalEndpoint {
 
         let transport = TokioChildProcess::new(cmd).map_err(|e| {
             error!("Failed to create TokioChildProcess: {}", e);
-            ProxyError::ServerStartFailed(format!("{}: {}", self.name, e))
+            crate::error::ProxyError::ServerStartFailed(format!("{}: {}", self.name, e))
         })?;
 
         let client = McpClient::new(self.name.clone());
         client.init_with_transport(transport).await?;
 
-        let mut client_lock = self.mcp_client.write().await;
-        *client_lock = Some(Arc::new(client));
+        self.client_holder.set(client).await;
 
         info!("Successfully started local MCP endpoint: {}", self.name);
         Ok(())
     }
 
-    /// Stop the MCP endpoint process
     async fn stop(&mut self) -> Result<()> {
-        if self.mcp_client.read().await.is_none() {
-            return Err(ProxyError::ServerNotRunning(self.name.clone()));
-        }
+        self.client_holder.ensure_running(&self.name).await?;
 
         info!("Stopping local MCP endpoint: {}", self.name);
 
-        let mut client_lock = self.mcp_client.write().await;
-        *client_lock = None;
+        self.client_holder.clear().await;
 
         info!("Successfully stopped local MCP endpoint: {}", self.name);
         Ok(())
@@ -104,10 +91,7 @@ impl EndpointInstance for LocalEndpoint {
     }
 
     fn is_started(&self) -> bool {
-        self.mcp_client
-            .try_read()
-            .map(|lock| lock.is_some())
-            .unwrap_or(false)
+        self.client_holder.is_set()
     }
 
     async fn attach_http_route<S>(
