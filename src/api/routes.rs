@@ -1,16 +1,16 @@
-use crate::http::handlers::AppState;
+use crate::api::handlers::ApiState;
 use axum::{
     routing::{get, post},
     Router,
 };
 
-pub fn health_routes() -> Router<AppState> {
+pub fn health_routes() -> Router<ApiState> {
     Router::new()
         .route("/health", get(super::handlers::health_check))
         .route("/info", get(super::handlers::server_info))
 }
 
-pub fn management_routes() -> Router<AppState> {
+pub fn management_routes() -> Router<ApiState> {
     Router::new()
         .route("/servers", get(super::handlers::list_servers))
         .route(
@@ -25,9 +25,9 @@ pub fn management_routes() -> Router<AppState> {
         )
 }
 
-pub fn mcp_routes() -> Router<AppState> {
+pub fn mcp_routes() -> Router<ApiState> {
     Router::new()
-        // Note: /mcp/{path} is handled by nest_service in main.rs for SSE support
+        // Note: /mcp/{path} is handled by nest_service in api/mod.rs for SSE support
         // These REST API endpoints remain for backward compatibility
         .route("/mcp/{path}/tools", get(super::handlers::mcp_list_tools))
         .route(

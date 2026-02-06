@@ -1,14 +1,40 @@
 use crate::config::ToolFilter;
-use crate::proxy::client::Tool;
+use crate::mcp::ToolDefinition;
+
+impl ToolFilter {
+    /// Check if a tool should be allowed based on include/exclude filters
+    /// Include list takes precedence - if present, tool must be in it
+    /// Exclude list is then checked - if present, tool must not be in it
+    pub fn allows(&self, tool_name: &str) -> bool {
+        // If include list exists, tool must be in it
+        if let Some(include) = &self.include {
+            if !include.iter().any(|t| t == tool_name) {
+                return false;
+            }
+        }
+
+        // If exclude list exists, tool must not be in it
+        if let Some(exclude) = &self.exclude {
+            if exclude.iter().any(|t| t == tool_name) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
 
 /// Apply tool filters to a list of tools
 /// This is a public API function for library consumers
-pub fn apply_tool_filter(tools: Vec<Tool>, filter: Option<&ToolFilter>) -> Vec<Tool> {
+pub fn apply_tool_filter(
+    tools: Vec<ToolDefinition>,
+    filter: Option<&ToolFilter>,
+) -> Vec<ToolDefinition> {
     match filter {
         None => tools, // No filter, return all tools
         Some(filter) => tools
             .into_iter()
-            .filter(|tool| filter.should_allow(&tool.name))
+            .filter(|tool| filter.allows(&tool.name))
             .collect(),
     }
 }
@@ -18,7 +44,7 @@ pub fn apply_tool_filter(tools: Vec<Tool>, filter: Option<&ToolFilter>) -> Vec<T
 pub fn is_tool_allowed(tool_name: &str, filter: Option<&ToolFilter>) -> bool {
     match filter {
         None => true, // No filter, all tools allowed
-        Some(filter) => filter.should_allow(tool_name),
+        Some(filter) => filter.allows(tool_name),
     }
 }
 
@@ -27,8 +53,8 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn create_test_tool(name: &str) -> Tool {
-        Tool {
+    fn create_test_tool(name: &str) -> ToolDefinition {
+        ToolDefinition {
             name: name.to_string(),
             description: Some(format!("Test tool {}", name)),
             input_schema: json!({}),

@@ -1,4 +1,4 @@
-[server]
+[http]
 host = "127.0.0.1"
 port = 3000
 
@@ -6,15 +6,15 @@ port = 3000
 level = "info"
 format = "pretty"
 
-# Test configuration with a remote MCP server
-[[mcp_servers]]
+# Test configuration with a remote MCP endpoint
+[[endpoints]]
 name = "microsoft-learn"
 type = "remote"
 url = "https://learn.microsoft.com/api/mcp"
 path = "microsoft-learn"
 
 
-[[mcp_servers]]
+[[endpoints]]
 name = "time"
 type = "local"
 command = "docker"

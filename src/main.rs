@@ -1,8 +1,9 @@
+mod api;
 mod config;
+mod endpoint;
 mod error;
-mod http;
-mod proxy;
-mod server;
+mod mcp;
+mod routing;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -32,7 +33,7 @@ async fn main() -> Result<()> {
     // Initialize rustls crypto provider for axum-reverse-proxy
     // This must be done before any TLS operations
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-    
+
     // Load .env file if it exists
     let _ = dotenvy::dotenv();
 
@@ -40,8 +41,12 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Load configuration
-    let mut config = config::load_config(&cli.config)
-        .with_context(|| format!("Failed to load configuration from: {}", cli.config.display()))?;
+    let mut config = config::load_config(&cli.config).with_context(|| {
+        format!(
+            "Failed to load configuration from: {}",
+            cli.config.display()
+        )
+    })?;
 
     // Apply CLI overrides
     if let Some(log_level) = cli.log_level {
@@ -59,7 +64,7 @@ async fn main() -> Result<()> {
 
     // Start the proxy server
     info!("Starting rusted-tools MCP proxy server...");
-    http::start_server(config).await?;
+    api::start_server(config).await?;
 
     Ok(())
 }
@@ -67,8 +72,8 @@ async fn main() -> Result<()> {
 fn init_logging(config: &config::LoggingConfig) -> Result<()> {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&config.level));
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.level));
 
     match config.format.as_str() {
         "json" => {
@@ -89,21 +94,24 @@ fn init_logging(config: &config::LoggingConfig) -> Result<()> {
     Ok(())
 }
 
-fn print_banner(config: &config::ProxyConfig) {
+fn print_banner(config: &config::AppConfig) {
     let version = env!("CARGO_PKG_VERSION");
     let authors = env!("CARGO_PKG_AUTHORS");
 
     info!("╔═══════════════════════════════════════════════════════════╗");
     info!("║                     RUSTED-TOOLS                          ║");
-    info!("║              MCP Proxy Server v{}                      ║", version);
+    info!(
+        "║              MCP Proxy Server v{}                      ║",
+        version
+    );
     info!("║                                                           ║");
     info!("║  Author: {}                            ║", authors);
     info!("╚═══════════════════════════════════════════════════════════╝");
     info!("");
     info!("Server Configuration:");
-    info!("  → Address: {}:{}", config.server.host, config.server.port);
+    info!("  → Address: {}:{}", config.http.host, config.http.port);
     info!("  → Log Level: {}", config.logging.level);
     info!("  → Log Format: {}", config.logging.format);
-    info!("  → MCP Servers: {}", config.mcp_servers.len());
+    info!("  → MCP Endpoints: {}", config.endpoints.len());
     info!("");
 }

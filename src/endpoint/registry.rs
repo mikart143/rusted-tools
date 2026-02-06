@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
 
-/// Status of an MCP server instance
+/// Status of an MCP endpoint instance
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
-pub enum ServerStatus {
+pub enum EndpointStatus {
     Starting,
     Running,
     Stopping,
@@ -15,103 +15,103 @@ pub enum ServerStatus {
     Failed,
 }
 
-impl fmt::Display for ServerStatus {
+impl fmt::Display for EndpointStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            ServerStatus::Starting => "starting",
-            ServerStatus::Running => "running",
-            ServerStatus::Stopping => "stopping",
-            ServerStatus::Stopped => "stopped",
-            ServerStatus::Failed => "failed",
+            EndpointStatus::Starting => "starting",
+            EndpointStatus::Running => "running",
+            EndpointStatus::Stopping => "stopping",
+            EndpointStatus::Stopped => "stopped",
+            EndpointStatus::Failed => "failed",
         };
         write!(f, "{}", s)
     }
 }
 
-/// Information about a registered server
+/// Information about a registered endpoint
 #[derive(Debug, Clone)]
-pub struct ServerInfo {
+pub struct EndpointInfo {
     pub name: String,
     pub path: String,
-    pub server_type: ServerType,
-    pub status: ServerStatus,
+    pub endpoint_type: EndpointType,
+    pub status: EndpointStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum ServerType {
+pub enum EndpointType {
     Local,
     Remote,
 }
 
-impl fmt::Display for ServerType {
+impl fmt::Display for EndpointType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            ServerType::Local => "local",
-            ServerType::Remote => "remote",
+            EndpointType::Local => "local",
+            EndpointType::Remote => "remote",
         };
         write!(f, "{}", s)
     }
 }
 
-/// Registry for tracking active MCP server instances
+/// Registry for tracking active MCP endpoint instances
 #[derive(Clone)]
-pub struct ServerRegistry {
-    servers: Arc<DashMap<String, ServerInfo>>,
+pub struct EndpointRegistry {
+    endpoints: Arc<DashMap<String, EndpointInfo>>,
 }
 
-impl ServerRegistry {
+impl EndpointRegistry {
     pub fn new() -> Self {
         Self {
-            servers: Arc::new(DashMap::new()),
+            endpoints: Arc::new(DashMap::new()),
         }
     }
 
-    /// Register a new server
-    pub fn register(&self, name: String, path: String, server_type: ServerType) -> Result<()> {
-        if self.servers.contains_key(&name) {
+    /// Register a new endpoint
+    pub fn register(&self, name: String, path: String, endpoint_type: EndpointType) -> Result<()> {
+        if self.endpoints.contains_key(&name) {
             return Err(ProxyError::ServerAlreadyExists(name));
         }
 
-        let info = ServerInfo {
+        let info = EndpointInfo {
             name: name.clone(),
             path,
-            server_type,
-            status: ServerStatus::Stopped,
+            endpoint_type,
+            status: EndpointStatus::Stopped,
         };
 
-        self.servers.insert(name, info);
+        self.endpoints.insert(name, info);
         Ok(())
     }
 
-    /// Get server info by name
-    pub fn get(&self, name: &str) -> Result<ServerInfo> {
-        self.servers
+    /// Get endpoint info by name
+    pub fn get(&self, name: &str) -> Result<EndpointInfo> {
+        self.endpoints
             .get(name)
             .map(|entry| entry.value().clone())
             .ok_or_else(|| ProxyError::ServerNotFound(name.to_string()))
     }
 
-    /// Update server status
-    pub fn set_status(&self, name: &str, status: ServerStatus) -> Result<()> {
+    /// Update endpoint status
+    pub fn set_status(&self, name: &str, status: EndpointStatus) -> Result<()> {
         let mut entry = self
-            .servers
+            .endpoints
             .get_mut(name)
             .ok_or_else(|| ProxyError::ServerNotFound(name.to_string()))?;
         entry.status = status;
         Ok(())
     }
 
-    /// List all registered servers
-    pub fn list(&self) -> Vec<ServerInfo> {
-        self.servers
+    /// List all registered endpoints
+    pub fn list(&self) -> Vec<EndpointInfo> {
+        self.endpoints
             .iter()
             .map(|entry| entry.value().clone())
             .collect()
     }
 }
 
-impl Default for ServerRegistry {
+impl Default for EndpointRegistry {
     fn default() -> Self {
         Self::new()
     }
@@ -123,77 +123,77 @@ mod tests {
 
     #[test]
     fn test_register_and_get() {
-        let registry = ServerRegistry::new();
+        let registry = EndpointRegistry::new();
         registry
             .register(
                 "test-server".to_string(),
                 "test".to_string(),
-                ServerType::Local,
+                EndpointType::Local,
             )
             .unwrap();
 
         let info = registry.get("test-server").unwrap();
         assert_eq!(info.name, "test-server");
         assert_eq!(info.path, "test");
-        assert_eq!(info.status, ServerStatus::Stopped);
+        assert_eq!(info.status, EndpointStatus::Stopped);
     }
 
     #[test]
     fn test_duplicate_registration() {
-        let registry = ServerRegistry::new();
+        let registry = EndpointRegistry::new();
         registry
             .register(
                 "test-server".to_string(),
                 "test".to_string(),
-                ServerType::Local,
+                EndpointType::Local,
             )
             .unwrap();
 
         let result = registry.register(
             "test-server".to_string(),
             "test2".to_string(),
-            ServerType::Local,
+            EndpointType::Local,
         );
         assert!(result.is_err());
     }
 
     #[test]
     fn test_set_status() {
-        let registry = ServerRegistry::new();
+        let registry = EndpointRegistry::new();
         registry
             .register(
                 "test-server".to_string(),
                 "test".to_string(),
-                ServerType::Local,
+                EndpointType::Local,
             )
             .unwrap();
 
         registry
-            .set_status("test-server", ServerStatus::Running)
+            .set_status("test-server", EndpointStatus::Running)
             .unwrap();
         let info = registry.get("test-server").unwrap();
-        assert_eq!(info.status, ServerStatus::Running);
+        assert_eq!(info.status, EndpointStatus::Running);
     }
 
     #[test]
     fn test_list() {
-        let registry = ServerRegistry::new();
+        let registry = EndpointRegistry::new();
         registry
             .register(
                 "server1".to_string(),
                 "path1".to_string(),
-                ServerType::Local,
+                EndpointType::Local,
             )
             .unwrap();
         registry
             .register(
                 "server2".to_string(),
                 "path2".to_string(),
-                ServerType::Remote,
+                EndpointType::Remote,
             )
             .unwrap();
 
-        let servers = registry.list();
-        assert_eq!(servers.len(), 2);
+        let endpoints = registry.list();
+        assert_eq!(endpoints.len(), 2);
     }
 }

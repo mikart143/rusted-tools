@@ -1,11 +1,11 @@
 # Comprehensive test configuration for rusted-tools MCP proxy
 
-[server]
+[http]
 host = "127.0.0.1"
 port = 3000
 
 # Knowledge Graph / Memory Server (Node.js)
-[[mcp_servers]]
+[[endpoints]]
 name = "memory"
 type = "local"
 command = "npx"
@@ -15,7 +15,7 @@ auto_start = true
 restart_on_failure = true
 
 # Web Fetch Server (Docker)
-[[mcp_servers]]
+[[endpoints]]
 name = "fetch"
 type = "local"
 command = "docker"

@@ -1,9 +1,9 @@
+use super::types::{ToolCallRequest, ToolCallResponse, ToolContent, ToolDefinition};
 use crate::error::{ProxyError, Result};
 use rmcp::model::{CallToolRequestParams, PaginatedRequestParams, RawContent};
 use rmcp::service::{RoleClient, RunningService};
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::ServiceExt;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -14,37 +14,6 @@ use tracing::{debug, error, info};
 pub struct McpClient {
     server_name: String,
     service: Arc<RwLock<Option<RunningService<RoleClient, ()>>>>,
-}
-
-/// Represents an MCP tool definition
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Tool {
-    pub name: String,
-    pub description: Option<String>,
-    pub input_schema: Value,
-}
-
-/// Request to call an MCP tool
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallRequest {
-    pub name: String,
-    pub arguments: Value,
-}
-
-/// Response from an MCP tool call
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallResponse {
-    pub content: Vec<ToolResponseContent>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_error: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum ToolResponseContent {
-    Text { text: String },
-    Image { data: String, mime_type: String },
-    Resource { uri: String, mime_type: Option<String> },
 }
 
 impl McpClient {
@@ -84,10 +53,7 @@ impl McpClient {
 
         // Serve the client with the transport
         let service = ().serve(transport).await.map_err(|e| {
-            ProxyError::McpProtocol(format!(
-                "Failed to initialize MCP HTTP client: {:?}",
-                e
-            ))
+            ProxyError::McpProtocol(format!("Failed to initialize MCP HTTP client: {:?}", e))
         })?;
 
         // Store the service
@@ -102,7 +68,7 @@ impl McpClient {
     }
 
     /// List available tools from the MCP server
-    pub async fn list_tools(&self) -> Result<Vec<Tool>> {
+    pub async fn list_tools(&self) -> Result<Vec<ToolDefinition>> {
         let service_lock = self.service.read().await;
         let service = service_lock
             .as_ref()
@@ -117,10 +83,10 @@ impl McpClient {
 
         match service.list_tools(request).await {
             Ok(result) => {
-                let tool_list: Vec<Tool> = result
+                let tool_list: Vec<ToolDefinition> = result
                     .tools
                     .into_iter()
-                    .map(|t| Tool {
+                    .map(|t| ToolDefinition {
                         name: t.name.to_string(),
                         description: t.description.map(|d| d.to_string()),
                         input_schema: Value::Object((*t.input_schema).clone()),
@@ -165,14 +131,14 @@ impl McpClient {
 
         match service.call_tool(mcp_request).await {
             Ok(result) => {
-                let response_content: Vec<ToolResponseContent> = result
+                let response_content: Vec<ToolContent> = result
                     .content
                     .into_iter()
                     .filter_map(|c| match c.raw {
-                        RawContent::Text(text_content) => Some(ToolResponseContent::Text {
+                        RawContent::Text(text_content) => Some(ToolContent::Text {
                             text: text_content.text,
                         }),
-                        RawContent::Image(image_content) => Some(ToolResponseContent::Image {
+                        RawContent::Image(image_content) => Some(ToolContent::Image {
                             data: image_content.data,
                             mime_type: image_content.mime_type,
                         }),
@@ -183,12 +149,12 @@ impl McpClient {
                                     uri,
                                     mime_type,
                                     ..
-                                } => Some(ToolResponseContent::Resource { uri, mime_type }),
+                                } => Some(ToolContent::Resource { uri, mime_type }),
                                 rmcp::model::ResourceContents::BlobResourceContents {
                                     uri,
                                     mime_type,
                                     ..
-                                } => Some(ToolResponseContent::Resource { uri, mime_type }),
+                                } => Some(ToolContent::Resource { uri, mime_type }),
                             }
                         }
                         _ => None,
@@ -205,7 +171,10 @@ impl McpClient {
                     "Failed to call tool '{}' on {}: {}",
                     request.name, self.server_name, e
                 );
-                Err(ProxyError::McpProtocol(format!("Failed to call tool: {}", e)))
+                Err(ProxyError::McpProtocol(format!(
+                    "Failed to call tool: {}",
+                    e
+                )))
             }
         }
     }
@@ -229,14 +198,14 @@ mod tests {
     #[tokio::test]
     async fn test_client_not_initialized() {
         let client = McpClient::new("test-server".to_string());
-        
+
         // Attempting to use an uninitialized client should fail
         let result = client.list_tools().await;
         assert!(result.is_err());
-        
-        // Error should indicate client is not initialized
+
+        // Error should indicate server is not running
         if let Err(e) = result {
-            assert!(e.to_string().contains("not initialized"));
+            assert!(e.to_string().contains("not running"));
         }
     }
 }
