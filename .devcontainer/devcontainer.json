@@ -1,0 +1,72 @@
+{
+  "name": "rusted-tools",
+  "image": "almalinux:9",
+
+  "features": {
+    // Git for version control
+    "ghcr.io/devcontainers/features/git:1": {},
+
+    // Base setup - install build essentials and development packages
+    "ghcr.io/devcontainers-extra/features/bash-command:1": {
+      "command": "dnf install -y --allowerasing curl && dnf install -y gcc gcc-c++ make pkg-config openssl-devel dnf-plugins-core && dnf clean all"
+    },
+
+    // Non-root user setup and update common packages
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "username": "vscode",
+      "installOhMyZsh": false,
+      "installOhMyZshConfig": false,
+      "upgradePackages": true
+    },
+
+    // Rust toolchain with rustfmt, clippy, rust-analyzer, and rust-src
+    "ghcr.io/devcontainers/features/rust:1": {
+      "profile": "minimal",
+      "components": "rustfmt,clippy,rust-analyzer,rust-src"
+    },
+
+    // Docker-in-Docker support
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "pflannery.vscode-versionlens",
+        "tamasfe.even-better-toml",
+        "GitHub.copilot",
+        "redhat.vscode-yaml",
+        "vadimcn.vscode-lldb",
+        "DavidAnson.vscode-markdownlint",
+        "GitHub.vscode-github-actions"
+      ],
+      "settings": {
+        "rust-analyzer.check.command": "clippy",
+        "rust-analyzer.cargo.targetDir": "${workspaceFolder}/target",
+        "[rust]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "rust-lang.rust-analyzer"
+        }
+      }
+    }
+  },
+
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "rusted-tools HTTP Server",
+      "onAutoForward": "notify"
+    }
+  },
+
+  "mounts": [
+    "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,consistency=cached"
+  ],
+
+  "postStartCommand": "cargo build",
+
+  "remoteUser": "vscode"
+}

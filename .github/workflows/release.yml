@@ -1,0 +1,279 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  determine-version:
+    name: Determine Next Version
+    runs-on: ubuntu-latest
+    outputs:
+      new-release: ${{ steps.version.outputs.new-release }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Semantic-release dry run
+        id: dry-run
+        uses: cycjimmy/semantic-release-action@v6
+        with:
+          dry_run: true
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+            @semantic-release/exec
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract next version
+        id: version
+        shell: bash
+        run: |
+          OUTPUT="${{ steps.dry-run.outputs.log }}"
+          echo "$OUTPUT"
+
+          VERSION=$(echo "$OUTPUT" | grep -oP 'The next release version is \K[0-9]+\.[0-9]+\.[0-9]+' || true)
+          if [ -n "$VERSION" ]; then
+            echo "new-release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "Next version: $VERSION"
+          else
+            echo "new-release=false" >> "$GITHUB_OUTPUT"
+            echo "No new release needed"
+          fi
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: determine-version
+    if: needs.determine-version.outputs.new-release == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+            cross: false
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+            cross: true
+          - target: x86_64-apple-darwin
+            runner: macos-13
+            archive: tar.gz
+            cross: false
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            archive: tar.gz
+            cross: false
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            archive: zip
+            cross: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cmake (Ubuntu)
+        if: runner.os == 'Linux' && !matrix.cross
+        run: sudo apt-get update && sudo apt-get install -y cmake
+
+      - name: Install NASM (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build with cargo
+        if: ${{ !matrix.cross }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Build with cross
+        if: ${{ matrix.cross }}
+        run: cross build --release --locked --target ${{ matrix.target }}
+
+      - name: Package (Unix)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          VERSION="${{ needs.determine-version.outputs.version }}"
+          STAGING="rusted-tools-${VERSION}-${{ matrix.target }}"
+          mkdir -p "$STAGING"
+          cp "target/${{ matrix.target }}/release/rusted-tools" "$STAGING/"
+          cp README.md LICENSE config.toml.example "$STAGING/"
+          tar czf "$STAGING.tar.gz" "$STAGING"
+          echo "ASSET=$STAGING.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Package (Windows)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          VERSION="${{ needs.determine-version.outputs.version }}"
+          STAGING="rusted-tools-${VERSION}-${{ matrix.target }}"
+          mkdir -p "$STAGING"
+          cp "target/${{ matrix.target }}/release/rusted-tools.exe" "$STAGING/"
+          cp README.md LICENSE config.toml.example "$STAGING/"
+          7z a "$STAGING.zip" "$STAGING"
+          echo "ASSET=$STAGING.zip" >> "$GITHUB_ENV"
+
+      - name: Generate SHA256
+        shell: bash
+        run: shasum -a 256 "${{ env.ASSET }}" > "${{ env.ASSET }}.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET }}.sha256
+
+  release:
+    name: Publish Release
+    needs: [determine-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create combined checksums file
+        run: |
+          cd artifacts
+          cat *.sha256 > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Prepare release assets list
+        id: assets
+        run: |
+          ASSETS_DIR="$PWD/artifacts"
+          echo "dir=$ASSETS_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Run semantic-release
+        uses: cycjimmy/semantic-release-action@v6
+        with:
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+            @semantic-release/exec
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ASSETS_DIR: ${{ steps.assets.outputs.dir }}
+
+  publish-docker:
+    name: Publish Docker Image
+    needs: [determine-version, release]
+    if: needs.determine-version.outputs.new-release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ghcr.io/${{ github.repository }}:v${{ needs.determine-version.outputs.version }}
+            ghcr.io/${{ github.repository }}:latest
+
+  update-homebrew:
+    name: Update Homebrew Formula
+    needs: [determine-version, release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Pull latest changes
+        run: git pull origin main
+
+      - name: Download checksums
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Extract version and checksums
+        id: meta
+        run: |
+          VERSION="${{ needs.determine-version.outputs.version }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          SHA_MACOS_ARM=$(grep "aarch64-apple-darwin" artifacts/SHA256SUMS.txt | awk '{print $1}')
+          SHA_MACOS_X86=$(grep "x86_64-apple-darwin" artifacts/SHA256SUMS.txt | awk '{print $1}')
+          SHA_LINUX_ARM=$(grep "aarch64-unknown-linux-gnu" artifacts/SHA256SUMS.txt | awk '{print $1}')
+          SHA_LINUX_X86=$(grep "x86_64-unknown-linux-gnu" artifacts/SHA256SUMS.txt | awk '{print $1}')
+
+          echo "sha_macos_arm=$SHA_MACOS_ARM" >> "$GITHUB_OUTPUT"
+          echo "sha_macos_x86=$SHA_MACOS_X86" >> "$GITHUB_OUTPUT"
+          echo "sha_linux_arm=$SHA_LINUX_ARM" >> "$GITHUB_OUTPUT"
+          echo "sha_linux_x86=$SHA_LINUX_X86" >> "$GITHUB_OUTPUT"
+
+      - name: Update formula
+        run: |
+          sed -i \
+            -e "s/VERSION_PLACEHOLDER/${{ steps.meta.outputs.version }}/g" \
+            -e "s/SHA256_MACOS_ARM64_PLACEHOLDER/${{ steps.meta.outputs.sha_macos_arm }}/g" \
+            -e "s/SHA256_MACOS_X86_64_PLACEHOLDER/${{ steps.meta.outputs.sha_macos_x86 }}/g" \
+            -e "s/SHA256_LINUX_ARM64_PLACEHOLDER/${{ steps.meta.outputs.sha_linux_arm }}/g" \
+            -e "s/SHA256_LINUX_X86_64_PLACEHOLDER/${{ steps.meta.outputs.sha_linux_x86 }}/g" \
+            Formula/rusted-tools.rb
+
+      - name: Commit updated formula
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/rusted-tools.rb
+          git commit -m "chore: update Homebrew formula to ${{ steps.meta.outputs.version }}" || echo "No changes to commit"
+          git push
