@@ -106,9 +106,7 @@ impl EndpointRegistry {
             .iter()
             .find(|entry| entry.value().path == path)
             .map(|entry| entry.value().clone())
-            .ok_or_else(|| {
-                ProxyError::server_not_found(format!("No endpoint at path: {}", path))
-            })
+            .ok_or_else(|| ProxyError::server_not_found(format!("No endpoint at path: {}", path)))
     }
 
     /// Update endpoint status

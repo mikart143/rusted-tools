@@ -33,9 +33,7 @@ impl RemoteEndpoint {
                 info!("Configured remote MCP endpoint: {} at {}", config.name, url);
                 Ok(Self::new(config.name.clone(), url.clone()))
             }
-            _ => Err(ProxyError::config(
-                "Expected remote endpoint configuration",
-            )),
+            _ => Err(ProxyError::config("Expected remote endpoint configuration")),
         }
     }
 }
