@@ -1,8 +1,7 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -42,10 +41,11 @@ jobs:
         id: version
         shell: bash
         run: |
-          OUTPUT="${{ steps.dry-run.outputs.log }}"
-          echo "$OUTPUT"
+          VERSION="${{ steps.dry-run.outputs.new_release_version }}"
+          PUBLISHED="${{ steps.dry-run.outputs.new_release_published }}"
+          echo "Detected version: ${VERSION:-<none>}"
+          echo "Dry-run published: ${PUBLISHED:-<none>}"
 
-          VERSION=$(echo "$OUTPUT" | grep -oP 'The next release version is \K[0-9]+\.[0-9]+\.[0-9]+' || true)
           if [ -n "$VERSION" ]; then
             echo "new-release=true" >> "$GITHUB_OUTPUT"
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
