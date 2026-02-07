@@ -1,4 +1,5 @@
 use crate::config::LocalEndpointSettings;
+use crate::endpoint::HttpTransportAdapter;
 use crate::endpoint::client_holder::ClientHolder;
 use crate::error::Result;
 use crate::mcp::McpClient;
@@ -19,22 +20,28 @@ pub(crate) struct LocalEndpoint {
 
 impl LocalEndpoint {
     pub(crate) fn new(name: String, config: LocalEndpointSettings) -> Self {
+        let client_holder = ClientHolder::new(name.clone());
         Self {
             name,
             config,
-            client_holder: ClientHolder::new(),
+            client_holder,
         }
     }
 
     pub(crate) async fn get_client(&self) -> Result<Arc<McpClient>> {
-        self.client_holder.get(&self.name).await
+        let client = self.client_holder.get();
+        if client.is_running().await {
+            Ok(client)
+        } else {
+            Err(crate::error::ProxyError::server_not_running(
+                self.name.clone(),
+            ))
+        }
     }
 }
 
 impl LocalEndpoint {
     pub(crate) async fn start(&mut self) -> Result<()> {
-        self.client_holder.ensure_not_running(&self.name).await?;
-
         info!("Starting local MCP endpoint: {}", self.name);
         debug!(
             "Command: {} {}",
@@ -47,24 +54,21 @@ impl LocalEndpoint {
 
         let transport = TokioChildProcess::new(cmd).map_err(|e| {
             error!("Failed to create TokioChildProcess: {}", e);
-            crate::error::ProxyError::ServerStartFailed(format!("{}: {}", self.name, e))
+            crate::error::ProxyError::server_start_failed(&self.name, e)
         })?;
 
-        let client = McpClient::new(self.name.clone());
+        let client = self.client_holder.get();
         client.init_with_transport(transport).await?;
-
-        self.client_holder.set(client).await;
 
         info!("Successfully started local MCP endpoint: {}", self.name);
         Ok(())
     }
 
     pub(crate) async fn stop(&mut self) -> Result<()> {
-        self.client_holder.ensure_running(&self.name).await?;
-
         info!("Stopping local MCP endpoint: {}", self.name);
 
-        self.client_holder.clear().await;
+        let client = self.client_holder.get();
+        client.stop().await?;
 
         info!("Successfully stopped local MCP endpoint: {}", self.name);
         Ok(())
@@ -73,8 +77,10 @@ impl LocalEndpoint {
     pub(crate) async fn get_or_create_client(&self) -> Result<Arc<McpClient>> {
         self.get_client().await
     }
+}
 
-    pub(crate) async fn attach_http_route<S>(
+impl HttpTransportAdapter for LocalEndpoint {
+    fn attach_http_route<S>(
         &self,
         router: Router<S>,
         path: &str,
@@ -88,7 +94,7 @@ impl LocalEndpoint {
             self.name, path
         );
 
-        let client = self.get_or_create_client().await?;
+        let client = self.client_holder.get();
         let sse_service =
             crate::api::mcp_sse_service::create_local_sse_service(client, self.name.clone(), ct);
 

@@ -1,3 +1,6 @@
+use rmcp::ErrorData as McpError;
+use std::fmt::Display;
+use std::time::Duration;
 use thiserror::Error;
 use tracing::error;
 
@@ -17,6 +20,9 @@ pub enum ProxyError {
 
     #[error("Server is already running: {0}")]
     ServerAlreadyRunning(String),
+
+    #[error("Server runtime failed: {0}")]
+    ServerRuntimeFailed(String),
 
     #[error("Failed to start server: {0}")]
     ServerStartFailed(String),
@@ -52,6 +58,7 @@ impl ProxyError {
             ProxyError::ServerAlreadyExists(_) => StatusCode::CONFLICT,
             ProxyError::ServerNotRunning(_) => StatusCode::SERVICE_UNAVAILABLE,
             ProxyError::ServerAlreadyRunning(_) => StatusCode::CONFLICT,
+            ProxyError::ServerRuntimeFailed(_) => StatusCode::SERVICE_UNAVAILABLE,
             ProxyError::ServerStartFailed(_) => StatusCode::INTERNAL_SERVER_ERROR,
             ProxyError::McpProtocol(_) => StatusCode::BAD_GATEWAY,
             ProxyError::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -60,6 +67,79 @@ impl ProxyError {
             ProxyError::ToolNotAllowed(_) => StatusCode::FORBIDDEN,
             ProxyError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
+    }
+
+    pub fn config(message: impl Into<String>) -> Self {
+        ProxyError::Config(message.into())
+    }
+
+    pub fn server_not_found(name: impl Into<String>) -> Self {
+        ProxyError::ServerNotFound(name.into())
+    }
+
+    pub fn server_already_exists(name: impl Into<String>) -> Self {
+        ProxyError::ServerAlreadyExists(name.into())
+    }
+
+    pub fn server_not_running(name: impl Into<String>) -> Self {
+        ProxyError::ServerNotRunning(name.into())
+    }
+
+    pub fn server_already_running(name: impl Into<String>) -> Self {
+        ProxyError::ServerAlreadyRunning(name.into())
+    }
+
+    pub fn server_runtime_failed(server_name: impl Display, details: impl Display) -> Self {
+        ProxyError::ServerRuntimeFailed(format!("{}: {}", server_name, details))
+    }
+
+    pub fn server_start_failed(server_name: impl Display, err: impl Display) -> Self {
+        ProxyError::ServerStartFailed(format!("{}: {}", server_name, err))
+    }
+
+    pub fn invalid_request(err: impl Display) -> Self {
+        ProxyError::InvalidRequest(format!("Invalid request format: {}", err))
+    }
+
+    pub fn mcp_timeout(timeout: Duration) -> Self {
+        ProxyError::McpProtocol(format!("MCP request timed out after {:?}", timeout))
+    }
+
+    pub fn mcp_handshake_timeout(timeout: Duration, server_name: &str, url: Option<&str>) -> Self {
+        let message = match url {
+            Some(url) => format!(
+                "MCP handshake timed out after {:?} for server: {} at {}",
+                timeout, server_name, url
+            ),
+            None => format!(
+                "MCP handshake timed out after {:?} for server: {}",
+                timeout, server_name
+            ),
+        };
+        ProxyError::McpProtocol(message)
+    }
+
+    pub fn mcp_cancelled(action: &str, server_name: &str) -> Self {
+        ProxyError::McpProtocol(format!(
+            "MCP {} request cancelled for {}",
+            action, server_name
+        ))
+    }
+
+    pub fn mcp_protocol(message: impl Into<String>) -> Self {
+        ProxyError::McpProtocol(message.into())
+    }
+
+    pub fn mcp_service_error(action: &str, err: impl Display) -> Self {
+        ProxyError::McpProtocol(format!("Failed to {}: {}", action, err))
+    }
+
+    pub fn mcp_client_stop_failed(err: impl Display) -> Self {
+        ProxyError::McpProtocol(format!("Failed to stop MCP client: {}", err))
+    }
+
+    pub fn to_mcp_error(&self, context: &str) -> McpError {
+        McpError::internal_error(format!("Failed to {}: {}", context, self), None)
     }
 }
 
@@ -119,6 +199,10 @@ mod tests {
         assert_eq!(
             ProxyError::ServerAlreadyRunning("test".to_string()).status_code(),
             StatusCode::CONFLICT
+        );
+        assert_eq!(
+            ProxyError::ServerRuntimeFailed("test".to_string()).status_code(),
+            StatusCode::SERVICE_UNAVAILABLE
         );
         assert_eq!(
             ProxyError::ServerStartFailed("test".to_string()).status_code(),

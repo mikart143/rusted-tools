@@ -1,56 +1,24 @@
-use crate::config::{EndpointConfig, ToolFilter};
+use crate::config::ToolFilter;
 use crate::endpoint::EndpointManager;
-use crate::error::{ProxyError, Result};
+use crate::error::Result;
 use crate::mcp::McpClient;
-use dashmap::DashMap;
 use std::sync::Arc;
 
 /// Router that maps paths to MCP endpoint instances
 #[derive(Clone)]
 pub struct PathRouter {
     manager: Arc<EndpointManager>,
-    path_to_endpoint: Arc<DashMap<String, EndpointRoute>>,
-}
-
-/// Information about an endpoint route
-#[derive(Clone)]
-struct EndpointRoute {
-    endpoint_name: String,
-    tool_filter: Option<ToolFilter>,
 }
 
 impl PathRouter {
     pub fn new(manager: Arc<EndpointManager>) -> Self {
-        Self {
-            manager,
-            path_to_endpoint: Arc::new(DashMap::new()),
-        }
-    }
-
-    /// Initialize routes from configuration
-    pub fn init_from_config(&self, configs: &[EndpointConfig]) -> Result<()> {
-        for config in configs {
-            let path = config.name.clone();
-            let route = EndpointRoute {
-                endpoint_name: config.name.clone(),
-                tool_filter: config.tools.clone(),
-            };
-
-            self.path_to_endpoint.insert(path, route);
-        }
-
-        Ok(())
+        Self { manager }
     }
 
     /// Get endpoint name and filter for a path
     pub(crate) fn get_route(&self, path: &str) -> Result<(String, Option<ToolFilter>)> {
-        self.path_to_endpoint
-            .get(path)
-            .map(|entry| {
-                let route = entry.value();
-                (route.endpoint_name.clone(), route.tool_filter.clone())
-            })
-            .ok_or_else(|| ProxyError::ServerNotFound(format!("No endpoint at path: {}", path)))
+        let info = self.manager.get_endpoint_info_by_path(path)?;
+        Ok((info.name, info.tool_filter))
     }
 
     /// Get MCP client for a specific path (works for both local and remote)
@@ -68,9 +36,10 @@ impl PathRouter {
 
     /// List all routes
     pub(crate) fn list_routes(&self) -> Vec<(String, String)> {
-        self.path_to_endpoint
-            .iter()
-            .map(|entry| (entry.key().clone(), entry.value().endpoint_name.clone()))
+        self.manager
+            .list_endpoints()
+            .into_iter()
+            .map(|info| (info.path, info.name))
             .collect()
     }
 }
@@ -78,7 +47,8 @@ impl PathRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::EndpointKindConfig;
+    use crate::config::{EndpointConfig, EndpointKindConfig};
+    use crate::error::ProxyError;
     use std::collections::HashMap;
 
     #[tokio::test]
@@ -105,7 +75,6 @@ mod tests {
             .unwrap();
 
         let router = PathRouter::new(manager);
-        router.init_from_config(&[config]).unwrap();
 
         let (endpoint_name, filter) = router.get_route("test-server").unwrap();
         assert_eq!(endpoint_name, "test-server");
@@ -131,13 +100,11 @@ mod tests {
             .unwrap();
 
         let router = PathRouter::new(manager);
-        router.init_from_config(&[config]).unwrap();
 
-        // get_client creates a client, which will fail since endpoint is unreachable
         let result = router.get_client("test-server").await;
         assert!(
-            result.is_err(),
-            "Should fail when remote endpoint is unreachable"
+            matches!(result, Err(ProxyError::ServerNotRunning(_))),
+            "Should require explicit start before creating a client"
         );
     }
 }

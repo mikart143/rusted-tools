@@ -144,7 +144,6 @@ pub async fn build_test_app(config: &AppConfig) -> Router {
         .unwrap();
 
     let router = Arc::new(PathRouter::new(manager.clone()));
-    router.init_from_config(&config.endpoints).unwrap();
 
     let state = ApiState {
         manager,

@@ -58,8 +58,12 @@ impl EndpointManager {
     async fn init_local_endpoint(&self, config: EndpointConfig, auto_start: bool) -> Result<()> {
         let name = config.name.clone();
 
-        self.registry
-            .register(name.clone(), name.clone(), EndpointType::Local)?;
+        self.registry.register(
+            name.clone(),
+            name.clone(),
+            EndpointType::Local,
+            config.tools.clone(),
+        )?;
 
         let local_config = config.to_local_settings()?;
         let endpoint = LocalEndpoint::new(name.clone(), local_config);
@@ -80,8 +84,12 @@ impl EndpointManager {
     async fn init_remote_endpoint(&self, config: EndpointConfig) -> Result<()> {
         let name = config.name.clone();
 
-        self.registry
-            .register(name.clone(), name.clone(), EndpointType::Remote)?;
+        self.registry.register(
+            name.clone(),
+            name.clone(),
+            EndpointType::Remote,
+            config.tools.clone(),
+        )?;
 
         let remote_endpoint = RemoteEndpoint::from_config(&config)?;
         let endpoint_kind = EndpointKind::Remote(remote_endpoint);
@@ -98,7 +106,7 @@ impl EndpointManager {
         let info = self.registry.get(name)?;
 
         if info.status == EndpointStatus::Running {
-            return Err(ProxyError::ServerAlreadyRunning(name.to_string()));
+            return Err(ProxyError::server_already_running(name.to_string()));
         }
 
         self.registry.set_status(name, EndpointStatus::Starting)?;
@@ -106,7 +114,7 @@ impl EndpointManager {
         let endpoint_lock = self
             .endpoints
             .get(name)
-            .ok_or_else(|| ProxyError::ServerNotFound(name.to_string()))?;
+            .ok_or_else(|| ProxyError::server_not_found(name.to_string()))?;
 
         let mut endpoint = endpoint_lock.write().await;
 
@@ -129,7 +137,7 @@ impl EndpointManager {
         let info = self.registry.get(name)?;
 
         if info.status == EndpointStatus::Stopped {
-            return Err(ProxyError::ServerNotRunning(name.to_string()));
+            return Err(ProxyError::server_not_running(name.to_string()));
         }
 
         self.registry.set_status(name, EndpointStatus::Stopping)?;
@@ -137,7 +145,7 @@ impl EndpointManager {
         let endpoint_lock = self
             .endpoints
             .get(name)
-            .ok_or_else(|| ProxyError::ServerNotFound(name.to_string()))?;
+            .ok_or_else(|| ProxyError::server_not_found(name.to_string()))?;
 
         let mut endpoint = endpoint_lock.write().await;
 
@@ -148,6 +156,12 @@ impl EndpointManager {
                 Ok(())
             }
             Err(e) => {
+                if let Err(status_err) = self.registry.set_status(name, EndpointStatus::Failed) {
+                    warn!(
+                        "Failed to set endpoint status to failed for {}: {}",
+                        name, status_err
+                    );
+                }
                 error!("Failed to stop endpoint {}: {}", name, e);
                 Err(e)
             }
@@ -168,6 +182,10 @@ impl EndpointManager {
         self.registry.get(name)
     }
 
+    pub(crate) fn get_endpoint_info_by_path(&self, path: &str) -> Result<EndpointInfo> {
+        self.registry.get_by_path(path)
+    }
+
     /// List all registered endpoints
     pub(crate) fn list_endpoints(&self) -> Vec<EndpointInfo> {
         self.registry.list()
@@ -178,11 +196,16 @@ impl EndpointManager {
         self.endpoints
             .get(name)
             .map(|entry| entry.value().clone())
-            .ok_or_else(|| ProxyError::ServerNotFound(name.to_string()))
+            .ok_or_else(|| ProxyError::server_not_found(name.to_string()))
     }
 
     /// Get an MCP client for any endpoint (works for both local and remote)
     pub(crate) async fn get_client(&self, name: &str) -> Result<Arc<McpClient>> {
+        let info = self.registry.get(name)?;
+        if info.status != EndpointStatus::Running {
+            return Err(ProxyError::server_not_running(name.to_string()));
+        }
+
         let endpoint = self.get_endpoint(name)?;
         let endpoint_guard = endpoint.read().await;
         endpoint_guard.get_or_create_client().await
@@ -197,12 +220,11 @@ impl EndpointManager {
 
             // Only stop local endpoints; remote endpoints are external services
             // that don't need lifecycle management
-            if let Ok(info) = self.registry.get(name) {
-                if info.endpoint_type == EndpointType::Local {
-                    if let Err(e) = self.stop_endpoint(name).await {
-                        warn!("Error stopping endpoint {} during shutdown: {}", name, e);
-                    }
-                }
+            if let Ok(info) = self.registry.get(name)
+                && info.endpoint_type == EndpointType::Local
+                && let Err(e) = self.stop_endpoint(name).await
+            {
+                warn!("Error stopping endpoint {} during shutdown: {}", name, e);
             }
         }
 

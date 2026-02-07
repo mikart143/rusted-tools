@@ -1,3 +1,4 @@
+use crate::config::ToolFilter;
 use crate::error::{ProxyError, Result};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -35,6 +36,7 @@ pub(crate) struct EndpointInfo {
     pub(crate) path: String,
     pub(crate) endpoint_type: EndpointType,
     pub(crate) status: EndpointStatus,
+    pub(crate) tool_filter: Option<ToolFilter>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -73,9 +75,10 @@ impl EndpointRegistry {
         name: String,
         path: String,
         endpoint_type: EndpointType,
+        tool_filter: Option<ToolFilter>,
     ) -> Result<()> {
         if self.endpoints.contains_key(&name) {
-            return Err(ProxyError::ServerAlreadyExists(name));
+            return Err(ProxyError::server_already_exists(name));
         }
 
         let info = EndpointInfo {
@@ -83,6 +86,7 @@ impl EndpointRegistry {
             path,
             endpoint_type,
             status: EndpointStatus::Stopped,
+            tool_filter,
         };
 
         self.endpoints.insert(name, info);
@@ -94,7 +98,17 @@ impl EndpointRegistry {
         self.endpoints
             .get(name)
             .map(|entry| entry.value().clone())
-            .ok_or_else(|| ProxyError::ServerNotFound(name.to_string()))
+            .ok_or_else(|| ProxyError::server_not_found(name.to_string()))
+    }
+
+    pub(crate) fn get_by_path(&self, path: &str) -> Result<EndpointInfo> {
+        self.endpoints
+            .iter()
+            .find(|entry| entry.value().path == path)
+            .map(|entry| entry.value().clone())
+            .ok_or_else(|| {
+                ProxyError::server_not_found(format!("No endpoint at path: {}", path))
+            })
     }
 
     /// Update endpoint status
@@ -102,7 +116,7 @@ impl EndpointRegistry {
         let mut entry = self
             .endpoints
             .get_mut(name)
-            .ok_or_else(|| ProxyError::ServerNotFound(name.to_string()))?;
+            .ok_or_else(|| ProxyError::server_not_found(name.to_string()))?;
         entry.status = status;
         Ok(())
     }
@@ -134,6 +148,7 @@ mod tests {
                 "test-server".to_string(),
                 "test".to_string(),
                 EndpointType::Local,
+                None,
             )
             .unwrap();
 
@@ -151,6 +166,7 @@ mod tests {
                 "test-server".to_string(),
                 "test".to_string(),
                 EndpointType::Local,
+                None,
             )
             .unwrap();
 
@@ -158,6 +174,7 @@ mod tests {
             "test-server".to_string(),
             "test2".to_string(),
             EndpointType::Local,
+            None,
         );
         assert!(result.is_err());
     }
@@ -170,6 +187,7 @@ mod tests {
                 "test-server".to_string(),
                 "test".to_string(),
                 EndpointType::Local,
+                None,
             )
             .unwrap();
 
@@ -188,6 +206,7 @@ mod tests {
                 "server1".to_string(),
                 "path1".to_string(),
                 EndpointType::Local,
+                None,
             )
             .unwrap();
         registry
@@ -195,6 +214,7 @@ mod tests {
                 "server2".to_string(),
                 "path2".to_string(),
                 EndpointType::Remote,
+                None,
             )
             .unwrap();
 

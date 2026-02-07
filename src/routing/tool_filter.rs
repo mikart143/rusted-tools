@@ -7,17 +7,17 @@ impl ToolFilter {
     /// Exclude list is then checked - if present, tool must not be in it
     pub(crate) fn allows(&self, tool_name: &str) -> bool {
         // If include list exists, tool must be in it
-        if let Some(include) = &self.include {
-            if !include.iter().any(|t| t == tool_name) {
-                return false;
-            }
+        if let Some(include) = &self.include
+            && !include.iter().any(|t| t == tool_name)
+        {
+            return false;
         }
 
         // If exclude list exists, tool must not be in it
-        if let Some(exclude) = &self.exclude {
-            if exclude.iter().any(|t| t == tool_name) {
-                return false;
-            }
+        if let Some(exclude) = &self.exclude
+            && exclude.iter().any(|t| t == tool_name)
+        {
+            return false;
         }
 
         true

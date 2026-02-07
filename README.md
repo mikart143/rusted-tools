@@ -47,7 +47,7 @@ Rusted-Tools is an MCP proxy server that lets you manage multiple Model Context 
 
 ### Prerequisites
 
-- Rust 1.70+ ([rustup.rs](https://rustup.rs))
+- Rust 1.92+ ([rustup.rs](https://rustup.rs))
 - Docker (optional, for Docker-based servers)
 - Node.js (optional, for Node.js servers)
 
@@ -117,7 +117,9 @@ curl -X POST http://localhost:3000/mcp/memory/tools/call \
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Health check |
+| GET | `/info` | Server metadata |
 | GET | `/servers` | List all configured servers |
+| GET | `/servers/{name}/status` | Get status for a server |
 | POST | `/servers/{name}/start` | Start a server |
 | POST | `/servers/{name}/stop` | Stop a server |
 | POST | `/servers/{name}/restart` | Restart a server |
@@ -144,6 +146,7 @@ format = "pretty"     # pretty or json
 
 [mcp]
 request_timeout_secs = 30
+restart_delay_ms = 500
 ```
 
 **Local MCP Server:**

@@ -49,10 +49,11 @@ impl ServerHandler for StdioBridge {
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
         debug!("Bridge server listing tools");
-        let tools =
-            self.client.list_tools().await.map_err(|e| {
-                McpError::internal_error(format!("Failed to list tools: {}", e), None)
-            })?;
+        let tools = self
+            .client
+            .list_tools()
+            .await
+            .map_err(|e| e.to_mcp_error("list tools"))?;
 
         // Convert our ToolDefinition format to rmcp::model::Tool
         let mcp_tools: Vec<rmcp::model::Tool> = tools.into_iter().map(build_rmcp_tool).collect();
@@ -77,10 +78,11 @@ impl ServerHandler for StdioBridge {
             arguments: serde_json::Value::Object(params.arguments.unwrap_or_default()),
         };
 
-        let response =
-            self.client.call_tool(tool_request).await.map_err(|e| {
-                McpError::internal_error(format!("Failed to call tool: {}", e), None)
-            })?;
+        let response = self
+            .client
+            .call_tool(tool_request)
+            .await
+            .map_err(|e| e.to_mcp_error("call tool"))?;
 
         // Convert our response to rmcp format
         let content: Vec<rmcp::model::Content> = response

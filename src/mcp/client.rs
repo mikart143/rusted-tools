@@ -1,41 +1,61 @@
-use super::types::{ToolCallRequest, ToolCallResponse, ToolContent, ToolDefinition};
+use super::runtime::{McpRuntimeHandle, RuntimeState, spawn_runtime};
+use super::types::{ToolCallRequest, ToolCallResponse, ToolDefinition};
 use crate::error::{ProxyError, Result};
 use rmcp::ServiceExt;
-use rmcp::model::{CallToolRequestParams, PaginatedRequestParams, RawContent};
-use rmcp::service::{RoleClient, RunningService};
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
-use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// Default timeout for MCP handshake initialization.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Type alias for the runtime handle stored in RwLock
+type RuntimeHandleType = Arc<RwLock<Option<McpRuntimeHandle>>>;
 
 /// A wrapper around rmcp RunningService for the proxy
 #[derive(Clone)]
 pub(crate) struct McpClient {
     server_name: String,
-    service: Arc<RwLock<Option<Arc<RunningService<RoleClient, ()>>>>>,
+    runtime: RuntimeHandleType,
 }
 
 impl McpClient {
     pub(crate) fn new(server_name: String) -> Self {
         Self {
             server_name,
-            service: Arc::new(RwLock::new(None)),
+            runtime: Arc::new(RwLock::new(None)),
         }
     }
 
-    async fn store_service(&self, service: RunningService<RoleClient, ()>) {
-        let mut lock = self.service.write().await;
-        *lock = Some(Arc::new(service));
+    async fn ensure_not_running(&self) -> Result<()> {
+        let mut runtime_lock = self.runtime.write().await;
+        if let Some(runtime) = runtime_lock.as_ref() {
+            match runtime.state().await {
+                RuntimeState::Running => {
+                    return Err(ProxyError::server_already_running(self.server_name.clone()));
+                }
+                RuntimeState::Stopped | RuntimeState::Failed(_) => {
+                    *runtime_lock = None;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn is_running(&self) -> bool {
+        if let Some(runtime) = self.runtime.read().await.as_ref() {
+            matches!(runtime.state().await, RuntimeState::Running)
+        } else {
+            false
+        }
     }
 
     /// Initialize the MCP client with TokioChildProcess transport
     pub(crate) async fn init_with_transport(&self, transport: TokioChildProcess) -> Result<()> {
+        self.ensure_not_running().await?;
         info!("Initializing MCP client for server: {}", self.server_name);
 
         let ct = CancellationToken::new();
@@ -47,16 +67,15 @@ impl McpClient {
         .await
         .map_err(|_| {
             ct.cancel();
-            ProxyError::McpProtocol(format!(
-                "MCP handshake timed out after {:?} for server: {}",
-                HANDSHAKE_TIMEOUT, self.server_name
-            ))
+            ProxyError::mcp_handshake_timeout(HANDSHAKE_TIMEOUT, &self.server_name, None)
         })?
         .map_err(|e| {
-            ProxyError::McpProtocol(format!("Failed to initialize MCP client: {:?}", e))
+            ProxyError::mcp_protocol(format!("Failed to initialize MCP client: {:?}", e))
         })?;
 
-        self.store_service(service).await;
+        let runtime = spawn_runtime(self.server_name.clone(), service);
+        let mut runtime_lock = self.runtime.write().await;
+        *runtime_lock = Some(runtime);
 
         debug!("MCP client initialized for server: {}", self.server_name);
         Ok(())
@@ -64,6 +83,7 @@ impl McpClient {
 
     /// Initialize the MCP client with HTTP transport for remote servers
     pub(crate) async fn init_with_http(&self, url: &str) -> Result<()> {
+        self.ensure_not_running().await?;
         info!(
             "Initializing MCP HTTP client for server: {} at {}",
             self.server_name, url
@@ -80,16 +100,15 @@ impl McpClient {
         .await
         .map_err(|_| {
             ct.cancel();
-            ProxyError::McpProtocol(format!(
-                "MCP handshake timed out after {:?} for server: {} at {}",
-                HANDSHAKE_TIMEOUT, self.server_name, url
-            ))
+            ProxyError::mcp_handshake_timeout(HANDSHAKE_TIMEOUT, &self.server_name, Some(url))
         })?
         .map_err(|e| {
-            ProxyError::McpProtocol(format!("Failed to initialize MCP HTTP client: {:?}", e))
+            ProxyError::mcp_protocol(format!("Failed to initialize MCP HTTP client: {:?}", e))
         })?;
 
-        self.store_service(service).await;
+        let runtime = spawn_runtime(self.server_name.clone(), service);
+        let mut runtime_lock = self.runtime.write().await;
+        *runtime_lock = Some(runtime);
 
         debug!(
             "MCP HTTP client initialized for server: {}",
@@ -100,131 +119,44 @@ impl McpClient {
 
     /// List available tools from the MCP server
     pub(crate) async fn list_tools(&self) -> Result<Vec<ToolDefinition>> {
-        let service = {
-            let service_lock = self.service.read().await;
-            service_lock
-                .as_ref()
-                .cloned()
-                .ok_or_else(|| ProxyError::ServerNotRunning(self.server_name.clone()))?
-        };
+        let runtime = self
+            .runtime
+            .read()
+            .await
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| ProxyError::server_not_running(self.server_name.clone()))?;
 
-        debug!("Listing tools for server: {}", self.server_name);
-
-        let mut tool_list = Vec::new();
-        let mut cursor: Option<String> = None;
-
-        loop {
-            let request = Some(PaginatedRequestParams {
-                meta: None,
-                cursor: cursor.clone(),
-            });
-
-            match service.list_tools(request).await {
-                Ok(result) => {
-                    tool_list.extend(result.tools.into_iter().map(|t| ToolDefinition {
-                        name: t.name.to_string(),
-                        description: t.description.map(|d| d.to_string()),
-                        input_schema: Value::Object((*t.input_schema).clone()),
-                    }));
-
-                    cursor = result.next_cursor;
-                    if cursor.is_none() {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to list tools for {}: {}", self.server_name, e);
-                    return Err(ProxyError::McpProtocol(format!(
-                        "Failed to list tools: {}",
-                        e
-                    )));
-                }
-            }
-        }
-
-        debug!(
-            "Found {} tools for server: {}",
-            tool_list.len(),
-            self.server_name
-        );
-        Ok(tool_list)
+        runtime.list_tools(&self.server_name).await
     }
 
     /// Call a tool on the MCP server
     pub(crate) async fn call_tool(&self, request: ToolCallRequest) -> Result<ToolCallResponse> {
-        let service = {
-            let service_lock = self.service.read().await;
-            service_lock
-                .as_ref()
-                .cloned()
-                .ok_or_else(|| ProxyError::ServerNotRunning(self.server_name.clone()))?
-        };
+        let runtime = self
+            .runtime
+            .read()
+            .await
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| ProxyError::server_not_running(self.server_name.clone()))?;
 
-        debug!(
-            "Calling tool '{}' on server: {}",
-            request.name, self.server_name
-        );
-
-        let mcp_request = CallToolRequestParams {
-            meta: None,
-            name: request.name.clone().into(),
-            arguments: request.arguments.as_object().cloned(),
-            task: None,
-        };
-
-        match service.call_tool(mcp_request).await {
-            Ok(result) => {
-                let response_content: Vec<ToolContent> = result
-                    .content
-                    .into_iter()
-                    .filter_map(|c| match c.raw {
-                        RawContent::Text(text_content) => Some(ToolContent::Text {
-                            text: text_content.text,
-                        }),
-                        RawContent::Image(image_content) => Some(ToolContent::Image {
-                            data: image_content.data,
-                            mime_type: image_content.mime_type,
-                        }),
-                        RawContent::Resource(resource_content) => {
-                            // Extract URI from ResourceContents
-                            match resource_content.resource {
-                                rmcp::model::ResourceContents::TextResourceContents {
-                                    uri,
-                                    mime_type,
-                                    ..
-                                } => Some(ToolContent::Resource { uri, mime_type }),
-                                rmcp::model::ResourceContents::BlobResourceContents {
-                                    uri,
-                                    mime_type,
-                                    ..
-                                } => Some(ToolContent::Resource { uri, mime_type }),
-                            }
-                        }
-                        _ => None,
-                    })
-                    .collect();
-
-                Ok(ToolCallResponse {
-                    content: response_content,
-                    is_error: result.is_error,
-                })
-            }
-            Err(e) => {
-                error!(
-                    "Failed to call tool '{}' on {}: {}",
-                    request.name, self.server_name, e
-                );
-                Err(ProxyError::McpProtocol(format!(
-                    "Failed to call tool: {}",
-                    e
-                )))
-            }
-        }
+        runtime.call_tool(&self.server_name, request).await
     }
 
     /// Get server name
     pub(crate) fn server_name(&self) -> &str {
         &self.server_name
+    }
+
+    pub(crate) async fn stop(&self) -> Result<()> {
+        let runtime = {
+            let mut runtime_lock = self.runtime.write().await;
+            runtime_lock
+                .take()
+                .ok_or_else(|| ProxyError::server_not_running(self.server_name.clone()))?
+        };
+
+        runtime.stop(&self.server_name).await
     }
 }
 

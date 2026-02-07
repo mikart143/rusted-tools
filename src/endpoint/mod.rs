@@ -22,6 +22,17 @@ pub(crate) enum EndpointKind {
     Remote(RemoteEndpoint),
 }
 
+pub(crate) trait HttpTransportAdapter {
+    fn attach_http_route<S>(
+        &self,
+        router: Router<S>,
+        path: &str,
+        ct: CancellationToken,
+    ) -> Result<Router<S>>
+    where
+        S: Clone + Send + Sync + 'static;
+}
+
 impl EndpointKind {
     pub(crate) async fn start(&mut self) -> Result<()> {
         match self {
@@ -43,8 +54,10 @@ impl EndpointKind {
             EndpointKind::Remote(s) => s.get_or_create_client().await,
         }
     }
+}
 
-    pub(crate) async fn attach_http_route<S>(
+impl HttpTransportAdapter for EndpointKind {
+    fn attach_http_route<S>(
         &self,
         router: Router<S>,
         path: &str,
@@ -54,8 +67,8 @@ impl EndpointKind {
         S: Clone + Send + Sync + 'static,
     {
         match self {
-            EndpointKind::Local(s) => s.attach_http_route(router, path, ct).await,
-            EndpointKind::Remote(s) => s.attach_http_route(router, path, ct).await,
+            EndpointKind::Local(s) => HttpTransportAdapter::attach_http_route(s, router, path, ct),
+            EndpointKind::Remote(s) => HttpTransportAdapter::attach_http_route(s, router, path, ct),
         }
     }
 }

@@ -3,7 +3,7 @@ pub(crate) mod mcp_sse_service;
 pub mod routes;
 
 use crate::config::AppConfig;
-use crate::endpoint::EndpointManager;
+use crate::endpoint::{EndpointManager, HttpTransportAdapter};
 use crate::routing::PathRouter;
 use anyhow::Result;
 use axum::Router;
@@ -25,7 +25,6 @@ pub async fn start_server(config: AppConfig) -> Result<()> {
 
     // Initialize router
     let router = Arc::new(PathRouter::new(manager.clone()));
-    router.init_from_config(&config.endpoints)?;
 
     // Get routes before moving router into state
     let routes = router.list_routes();
@@ -73,7 +72,7 @@ async fn build_router(state: ApiState) -> Result<Router> {
         .merge(routes::management_routes())
         .merge(routes::mcp_routes());
 
-    // Add MCP endpoints using polymorphic attach_http_route
+    // Add MCP endpoints via transport adapters
     let routes = state.router.list_routes();
     for (path, endpoint_name) in routes {
         // Get endpoint instance
@@ -87,11 +86,8 @@ async fn build_router(state: ApiState) -> Result<Router> {
 
         let endpoint_guard = endpoint.read().await;
 
-        // Use polymorphic attach_http_route method
-        // Note: attach_http_route takes ownership of the router
-        let result = endpoint_guard
-            .attach_http_route(app, &path, ct.child_token())
-            .await;
+        // attach_http_route takes ownership of the router
+        let result = endpoint_guard.attach_http_route(app, &path, ct.child_token());
 
         app = match result {
             Ok(router) => router,
@@ -179,7 +175,6 @@ mod tests {
             .unwrap();
 
         let router = Arc::new(PathRouter::new(manager.clone()));
-        router.init_from_config(&config.endpoints).unwrap();
 
         let state = ApiState {
             manager,

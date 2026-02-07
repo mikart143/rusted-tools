@@ -121,12 +121,7 @@ pub(crate) async fn mcp_list_tools(
     // Call list_tools on the actual MCP client
     let tools = tokio::time::timeout(state.mcp_request_timeout, client.list_tools())
         .await
-        .map_err(|_| {
-            ProxyError::McpProtocol(format!(
-                "MCP request timed out after {:?}",
-                state.mcp_request_timeout
-            ))
-        })??;
+        .map_err(|_| ProxyError::mcp_timeout(state.mcp_request_timeout))??;
 
     // Apply filter using the centralized function
     let filtered_tools = tool_filter::apply_tool_filter(tools, filter.as_ref());
@@ -146,8 +141,8 @@ pub(crate) async fn mcp_call_tool(
     let (client, filter) = state.router.get_client(&path).await?;
 
     // Parse the tool call request
-    let request: crate::mcp::ToolCallRequest = serde_json::from_value(payload)
-        .map_err(|e| ProxyError::InvalidRequest(format!("Invalid request format: {}", e)))?;
+    let request: crate::mcp::ToolCallRequest =
+        serde_json::from_value(payload).map_err(ProxyError::invalid_request)?;
 
     // Check if tool is allowed using the centralized function
     if !tool_filter::is_tool_allowed(&request.name, filter.as_ref()) {
@@ -157,12 +152,7 @@ pub(crate) async fn mcp_call_tool(
     // Call the tool
     let response = tokio::time::timeout(state.mcp_request_timeout, client.call_tool(request))
         .await
-        .map_err(|_| {
-            ProxyError::McpProtocol(format!(
-                "MCP request timed out after {:?}",
-                state.mcp_request_timeout
-            ))
-        })??;
+        .map_err(|_| ProxyError::mcp_timeout(state.mcp_request_timeout))??;
     Ok(Json(json!(response)))
 }
 
@@ -203,7 +193,6 @@ mod tests {
         manager.init_from_config(configs.clone()).await.unwrap();
 
         let router = Arc::new(PathRouter::new(manager.clone()));
-        router.init_from_config(&configs).unwrap();
 
         ApiState {
             manager,

@@ -1,4 +1,5 @@
 use crate::config::EndpointConfig;
+use crate::endpoint::HttpTransportAdapter;
 use crate::endpoint::client_holder::ClientHolder;
 use crate::error::{ProxyError, Result};
 use crate::mcp::McpClient;
@@ -18,10 +19,11 @@ pub(crate) struct RemoteEndpoint {
 
 impl RemoteEndpoint {
     pub(crate) fn new(name: String, url: String) -> Self {
+        let client_holder = ClientHolder::new(name.clone());
         Self {
             name,
             url,
-            client_holder: ClientHolder::new(),
+            client_holder,
         }
     }
 
@@ -31,8 +33,8 @@ impl RemoteEndpoint {
                 info!("Configured remote MCP endpoint: {} at {}", config.name, url);
                 Ok(Self::new(config.name.clone(), url.clone()))
             }
-            _ => Err(ProxyError::Config(
-                "Expected remote endpoint configuration".to_string(),
+            _ => Err(ProxyError::config(
+                "Expected remote endpoint configuration",
             )),
         }
     }
@@ -40,14 +42,12 @@ impl RemoteEndpoint {
 
 impl RemoteEndpoint {
     pub(crate) async fn start(&mut self) -> Result<()> {
-        self.client_holder.ensure_not_running(&self.name).await?;
-
         info!(
             "Starting remote MCP endpoint: {} at {}",
             self.name, self.url
         );
 
-        let client = McpClient::new(self.name.clone());
+        let client = self.client_holder.get();
         client.init_with_http(&self.url).await?;
 
         match client.list_tools().await {
@@ -66,40 +66,36 @@ impl RemoteEndpoint {
             }
         }
 
-        self.client_holder.set(client).await;
-
         info!("Successfully started remote MCP endpoint: {}", self.name);
         Ok(())
     }
 
     pub(crate) async fn stop(&mut self) -> Result<()> {
-        self.client_holder.ensure_running(&self.name).await?;
-
         info!("Stopping remote MCP endpoint: {}", self.name);
 
-        self.client_holder.clear().await;
+        let client = self.client_holder.get();
+        client.stop().await?;
 
         info!("Successfully stopped remote MCP endpoint: {}", self.name);
         Ok(())
     }
 
     pub(crate) async fn get_or_create_client(&self) -> Result<Arc<McpClient>> {
-        if let Ok(client) = self.client_holder.get(&self.name).await {
-            return Ok(client);
+        let client = self.client_holder.get();
+        if !client.is_running().await {
+            info!(
+                "Creating new HTTP client for remote endpoint: {}",
+                self.name
+            );
+            client.init_with_http(&self.url).await?;
         }
 
-        info!(
-            "Creating new HTTP client for remote endpoint: {}",
-            self.name
-        );
-        let client = McpClient::new(self.name.clone());
-        client.init_with_http(&self.url).await?;
-        self.client_holder.set(client).await;
-
-        self.client_holder.get(&self.name).await
+        Ok(client)
     }
+}
 
-    pub(crate) async fn attach_http_route<S>(
+impl HttpTransportAdapter for RemoteEndpoint {
+    fn attach_http_route<S>(
         &self,
         router: Router<S>,
         path: &str,
