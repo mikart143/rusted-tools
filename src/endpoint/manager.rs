@@ -1,8 +1,8 @@
 use crate::config::{EndpointConfig, EndpointKindConfig};
+use crate::endpoint::EndpointKind;
 use crate::endpoint::local::LocalEndpoint;
 use crate::endpoint::registry::{EndpointInfo, EndpointRegistry, EndpointStatus, EndpointType};
 use crate::endpoint::remote::RemoteEndpoint;
-use crate::endpoint::EndpointKind;
 use crate::error::{ProxyError, Result};
 use crate::mcp::McpClient;
 use dashmap::DashMap;
@@ -194,7 +194,7 @@ impl EndpointManager {
 
         for entry in self.endpoints.iter() {
             let name = entry.key();
-            
+
             // Only stop local endpoints; remote endpoints are external services
             // that don't need lifecycle management
             if let Ok(info) = self.registry.get(name) {

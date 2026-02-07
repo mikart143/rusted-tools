@@ -55,10 +55,7 @@ impl ServerHandler for StdioBridge {
             })?;
 
         // Convert our ToolDefinition format to rmcp::model::Tool
-        let mcp_tools: Vec<rmcp::model::Tool> = tools
-            .into_iter()
-            .map(build_rmcp_tool)
-            .collect();
+        let mcp_tools: Vec<rmcp::model::Tool> = tools.into_iter().map(build_rmcp_tool).collect();
 
         Ok(ListToolsResult {
             meta: None,

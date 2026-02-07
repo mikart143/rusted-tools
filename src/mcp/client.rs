@@ -1,9 +1,9 @@
 use super::types::{ToolCallRequest, ToolCallResponse, ToolContent, ToolDefinition};
 use crate::error::{ProxyError, Result};
+use rmcp::ServiceExt;
 use rmcp::model::{CallToolRequestParams, PaginatedRequestParams, RawContent};
 use rmcp::service::{RoleClient, RunningService};
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
-use rmcp::ServiceExt;
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;

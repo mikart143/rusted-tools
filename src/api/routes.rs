@@ -1,7 +1,7 @@
 use crate::api::handlers::ApiState;
 use axum::{
-    routing::{get, post},
     Router,
+    routing::{get, post},
 };
 
 pub fn health_routes() -> Router<ApiState> {

@@ -1,12 +1,12 @@
 use crate::endpoint::EndpointManager;
 use crate::error::ProxyError;
-use crate::routing::{tool_filter, PathRouter};
+use crate::routing::{PathRouter, tool_filter};
 use axum::{
+    Json,
     extract::{Path, State},
     response::IntoResponse,
-    Json,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;

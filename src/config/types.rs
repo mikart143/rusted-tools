@@ -78,10 +78,7 @@ impl EndpointConfig {
     pub(crate) fn to_local_settings(&self) -> Result<LocalEndpointSettings> {
         match &self.endpoint_type {
             EndpointKindConfig::Local {
-                command,
-                args,
-                env,
-                ..
+                command, args, env, ..
             } => Ok(LocalEndpointSettings {
                 command: command.clone(),
                 args: args.clone(),

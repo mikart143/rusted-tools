@@ -28,10 +28,7 @@ impl RemoteEndpoint {
     pub(crate) fn from_config(config: &EndpointConfig) -> Result<Self> {
         match &config.endpoint_type {
             crate::config::EndpointKindConfig::Remote { url } => {
-                info!(
-                    "Configured remote MCP endpoint: {} at {}",
-                    config.name, url
-                );
+                info!("Configured remote MCP endpoint: {} at {}", config.name, url);
                 Ok(Self::new(config.name.clone(), url.clone()))
             }
             _ => Err(ProxyError::Config(
@@ -158,6 +155,4 @@ mod tests {
         let result = RemoteEndpoint::from_config(&config);
         assert!(result.is_err());
     }
-
-
 }
