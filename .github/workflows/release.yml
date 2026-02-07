@@ -115,41 +115,43 @@ jobs:
         if: ${{ matrix.cross }}
         run: cross build --release --locked --target ${{ matrix.target }}
 
-      - name: Package (Unix)
-        if: matrix.archive == 'tar.gz'
+      - name: Package
+        id: package
         shell: bash
         run: |
           VERSION="${{ needs.determine-version.outputs.version }}"
           STAGING="rusted-tools-${VERSION}-${{ matrix.target }}"
           mkdir -p "$STAGING"
-          cp "target/${{ matrix.target }}/release/rusted-tools" "$STAGING/"
-          cp README.md LICENSE config.toml.example "$STAGING/"
-          tar czf "$STAGING.tar.gz" "$STAGING"
-          echo "ASSET=$STAGING.tar.gz" >> "$GITHUB_ENV"
-
-      - name: Package (Windows)
-        if: matrix.archive == 'zip'
-        shell: bash
-        run: |
-          VERSION="${{ needs.determine-version.outputs.version }}"
-          STAGING="rusted-tools-${VERSION}-${{ matrix.target }}"
-          mkdir -p "$STAGING"
-          cp "target/${{ matrix.target }}/release/rusted-tools.exe" "$STAGING/"
-          cp README.md LICENSE config.toml.example "$STAGING/"
-          7z a "$STAGING.zip" "$STAGING"
-          echo "ASSET=$STAGING.zip" >> "$GITHUB_ENV"
+          if [[ "${{ matrix.archive }}" == "zip" ]]; then
+            cp "target/${{ matrix.target }}/release/rusted-tools.exe" "$STAGING/"
+            cp README.md LICENSE config.toml.example "$STAGING/"
+            7z a "$STAGING.zip" "$STAGING"
+            echo "asset=$STAGING.zip" >> "$GITHUB_OUTPUT"
+          else
+            cp "target/${{ matrix.target }}/release/rusted-tools" "$STAGING/"
+            cp README.md LICENSE config.toml.example "$STAGING/"
+            tar czf "$STAGING.tar.gz" "$STAGING"
+            echo "asset=$STAGING.tar.gz" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Generate SHA256
         shell: bash
-        run: shasum -a 256 "${{ env.ASSET }}" > "${{ env.ASSET }}.sha256"
+        run: |
+          ASSET="${{ steps.package.outputs.asset }}"
+          OUTFILE="${ASSET}.sha256"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$ASSET" > "$OUTFILE"
+          else
+            shasum -a 256 "$ASSET" > "$OUTFILE"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
           path: |
-            ${{ env.ASSET }}
-            ${{ env.ASSET }}.sha256
+            ${{ steps.package.outputs.asset }}
+            ${{ steps.package.outputs.asset }}.sha256
 
   release:
     name: Publish Release
@@ -243,6 +245,11 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Create combined checksums file
+        run: |
+          cd artifacts
+          cat *.sha256 > SHA256SUMS.txt
 
       - name: Extract version and checksums
         id: meta
