@@ -52,8 +52,8 @@ jobs:
           context: .
           load: true
           tags: rusted-tools:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=trivy-image
+          cache-to: type=gha,mode=min,scope=trivy-image
 
       - name: Run Trivy image scan
         uses: aquasecurity/trivy-action@master

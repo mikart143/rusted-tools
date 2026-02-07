@@ -93,7 +93,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          shared-key: ${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          cache-targets: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install cmake (Ubuntu)
         if: runner.os == 'Linux' && !matrix.cross
@@ -221,8 +223,8 @@ jobs:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=publish-docker
+          cache-to: type=gha,mode=min,scope=publish-docker
           tags: |
             ghcr.io/${{ github.repository }}:v${{ needs.determine-version.outputs.version }}
             ghcr.io/${{ github.repository }}:latest
