@@ -39,8 +39,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Check if there are changes
-          if git diff --quiet Formula/rusted-tools.rb; then
+          # Stage file so untracked changes are detected
+          git add Formula/rusted-tools.rb
+          if git diff --cached --quiet; then
             echo "No changes to sync"
             exit 0
           fi
@@ -50,7 +51,6 @@ jobs:
           git checkout -b "$BRANCH_NAME"
           
           # Commit and push to the branch
-          git add Formula/rusted-tools.rb
           git commit -m "chore: sync rusted-tools formula from main repository"
           git push origin "$BRANCH_NAME"
           
