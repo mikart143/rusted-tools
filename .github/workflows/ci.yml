@@ -68,6 +68,3 @@ jobs:
 
       - name: Run tests
         run: cargo test --locked
-
-      - name: Build release
-        run: cargo build --release --locked
