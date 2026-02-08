@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   sync-formula:
-    name: Sync Formula to homebrew-tab
+    name: Sync Formula to homebrew-tap
     runs-on: ubuntu-latest
     steps:
       - name: Checkout rusted-tools repository
@@ -21,20 +21,20 @@ jobs:
         with:
           path: rusted-tools
 
-      - name: Checkout homebrew-tab repository
+      - name: Checkout homebrew-tap repository
         uses: actions/checkout@v6
         with:
-          repository: mikart143/homebrew-tab
+          repository: mikart143/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: homebrew-tab
+          path: homebrew-tap
 
       - name: Copy Formula file
         run: |
-          mkdir -p homebrew-tab/Formula
-          cp rusted-tools/Formula/rusted-tools.rb homebrew-tab/Formula/rusted-tools.rb
+          mkdir -p homebrew-tap/Formula
+          cp rusted-tools/Formula/rusted-tools.rb homebrew-tap/Formula/rusted-tools.rb
 
       - name: Create Pull Request
-        working-directory: homebrew-tab
+        working-directory: homebrew-tap
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
