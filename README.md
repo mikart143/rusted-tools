@@ -267,7 +267,7 @@ graph TD
 
 ## Homebrew Tap
 
-This project automatically syncs its Homebrew formula to [mikart143/homebrew-tab](https://github.com/mikart143/homebrew-tab) whenever the formula is updated on the main branch.
+This project automatically syncs its Homebrew formula to [mikart143/homebrew-tab](https://github.com/mikart143/homebrew-tab) whenever the formula is updated on the main branch. The workflow creates a pull request in the tap repository for review before merging.
 
 ### Setup Requirements
 
@@ -278,7 +278,7 @@ To set up:
 1. Create a [Personal Access Token](https://github.com/settings/tokens) with `repo` scope
 2. Add it as a repository secret named `HOMEBREW_TAP_TOKEN` in Settings → Secrets and variables → Actions
 
-The workflow will automatically sync `Formula/rusted-tools.rb` to the tap repository whenever it's updated.
+The workflow will automatically create a pull request in the tap repository with the updated `Formula/rusted-tools.rb` whenever it's updated.
 
 ---
 

@@ -33,15 +33,32 @@ jobs:
           mkdir -p homebrew-tab/Formula
           cp rusted-tools/Formula/rusted-tools.rb homebrew-tab/Formula/rusted-tools.rb
 
-      - name: Commit and push to homebrew-tab
+      - name: Create Pull Request
         working-directory: homebrew-tab
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/rusted-tools.rb
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "chore: sync rusted-tools formula from main repository"
-            git push
+          
+          # Check if there are changes
+          if git diff --quiet Formula/rusted-tools.rb; then
+            echo "No changes to sync"
+            exit 0
           fi
+          
+          # Create a new branch for the PR
+          BRANCH_NAME="sync-formula-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH_NAME"
+          
+          # Commit and push to the branch
+          git add Formula/rusted-tools.rb
+          git commit -m "chore: sync rusted-tools formula from main repository"
+          git push origin "$BRANCH_NAME"
+          
+          # Create PR using GitHub CLI
+          gh pr create \
+            --title "Sync rusted-tools formula" \
+            --body "Automated sync of rusted-tools.rb formula from main repository" \
+            --base main \
+            --head "$BRANCH_NAME"
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
