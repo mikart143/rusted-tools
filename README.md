@@ -53,8 +53,25 @@ Rusted-Tools is an MCP proxy server that lets you manage multiple Model Context 
 
 ### Installation
 
+#### Brew
+
+Add tap:
 ```bash
-git clone https://github.com/YOUR_USERNAME/rusted-tools
+brew tap mikart143/tap
+```
+Install:
+```bash
+brew install rusted-tools
+```
+
+#### Github Release
+
+Download newest release from [Github Release](https://github.com/mikart143/rusted-tools/releases/)
+
+#### Manual Build
+
+```bash
+git clone https://github.com/mikart143/rusted-tools
 cd rusted-tools
 cargo build --release
 ```
