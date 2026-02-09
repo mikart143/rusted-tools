@@ -83,6 +83,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Update Cargo.toml with new version
+        shell: bash
+        run: |
+          VERSION="${{ needs.determine-version.outputs.version }}"
+          if [ -z "$VERSION" ]; then
+            echo "Error: Version is empty"
+            exit 1
+          fi
+          sed -i "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
+          grep "^version" Cargo.toml
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
