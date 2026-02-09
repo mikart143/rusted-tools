@@ -26,20 +26,6 @@ class RustedTools < Formula
 
   def install
     bin.install "rusted-tools"
-    etc.install "config.toml.example" => "rusted-tools/config.toml.example"
-  end
-
-  def caveats
-    <<~EOS
-      An example configuration file has been installed to:
-        #{etc}/rusted-tools/config.toml.example
-
-      To get started, copy it to your preferred location:
-        cp #{etc}/rusted-tools/config.toml.example ~/.config/rusted-tools/config.toml
-
-      Then run:
-        rusted-tools --config ~/.config/rusted-tools/config.toml
-    EOS
   end
 
   test do
