@@ -18,7 +18,7 @@ tower = "0.5.2"
 tower-http = { version = "0.6.8", features = ["cors", "trace"] }
 
 # MCP SDK
-rmcp = { version = "0.14", features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest", "transport-streamable-http-server"] }
+rmcp = { version = "0.15", features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest", "transport-streamable-http-server"] }
 
 # HTTP client
 reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }
