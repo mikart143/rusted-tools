@@ -27,7 +27,7 @@ rustls = { version = "0.23", features = ["aws-lc-rs"] }
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.9"
+toml = "1.0"
 config = { version = "0.15.19", features = ["toml"] }
 
 # Error handling
